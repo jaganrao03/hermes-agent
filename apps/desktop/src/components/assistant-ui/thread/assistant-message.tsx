@@ -30,6 +30,7 @@ import {
   messageContentText,
   pickPrimaryPreviewTarget
 } from '@/components/assistant-ui/thread/content'
+import { FollowUpSuggestions } from '@/components/assistant-ui/thread/follow-up-suggestions'
 import { MessageHoverTime } from '@/components/assistant-ui/thread/message-hover-time'
 import { MESSAGE_PARTS_COMPONENTS } from '@/components/assistant-ui/thread/message-parts'
 import { ReactionPicker } from '@/components/assistant-ui/thread/message-reactions'
@@ -342,14 +343,17 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
           {hasVisibleText &&
             responseTail &&
             (!isInterim || (responseIds.length > 0 && responseIds.at(-1) === messageId)) && (
-              <AssistantFooter
-                durationS={turnDurationS}
-                fullResponseAvailable={fullResponseAvailable}
-                getFullResponseText={getFullResponseText}
-                getMessageText={getMessageText}
-                messageId={messageId}
-                onBranchInNewChat={onBranchInNewChat}
-              />
+              <>
+                <AssistantFooter
+                  durationS={turnDurationS}
+                  fullResponseAvailable={fullResponseAvailable}
+                  getFullResponseText={getFullResponseText}
+                  getMessageText={getMessageText}
+                  messageId={messageId}
+                  onBranchInNewChat={onBranchInNewChat}
+                />
+                <FollowUpSuggestions />
+              </>
             )}
           {/* Last thing in the turn — under the action bar, the way Cursor ends a
           turn on its summary rather than burying it above the controls. */}
