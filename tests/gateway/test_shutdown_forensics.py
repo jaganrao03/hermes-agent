@@ -165,3 +165,38 @@ class TestParseSystemdDuration:
 # ---------------------------------------------------------------------------
 # check_systemd_timing_alignment
 # ---------------------------------------------------------------------------
+
+class TestSystemdTimeoutStopLookup:
+    """The system-scope fallback must not turn systemd's DEFAULTS into a verdict.
+
+    A sandboxed gateway (ProtectHome=tmpfs) cannot reach the user bus, so
+    `systemctl --user show <unit>` fails and the code retries without --user.
+    There the unit is unknown and systemd still answers with its defaults
+    (TimeoutStopSec=10s) — quoting that produced a permanent false "stale unit"
+    warning that `hermes gateway install --force` could not clear.
+    """
+
+    def _fake(self, monkeypatch, responses):
+        import collections
+        queue = collections.deque(responses)
+
+        def run(cmd, *a, **kw):
+            out, rc = queue.popleft()
+            return subprocess.CompletedProcess(cmd, rc, out, "" if rc == 0 else "boom")
+
+        monkeypatch.setattr(sf.subprocess, "run", run)
+
+    def test_unknown_unit_in_system_scope_is_not_accepted(self, monkeypatch):
+        self._fake(monkeypatch, [
+            ("", 1),                                             # systemctl --user: no bus
+            ("LoadState=not-found\nTimeoutStopUSec=10s\n", 0),   # system scope: defaults
+        ])
+        assert sf._systemd_timeout_stop_us("hermes-gateway-x.service") is None
+
+    def test_loaded_unit_value_is_returned(self, monkeypatch):
+        self._fake(monkeypatch, [("LoadState=loaded\nTimeoutStopUSec=210000000\n", 0)])
+        assert sf._systemd_timeout_stop_us("hermes-gateway-x.service") == 210_000_000
+
+    def test_missing_load_state_keeps_previous_behaviour(self, monkeypatch):
+        self._fake(monkeypatch, [("TimeoutStopUSec=90s\n", 0)])
+        assert sf._systemd_timeout_stop_us("hermes-gateway-x.service") == 90_000_000
