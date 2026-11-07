@@ -1,5 +1,4 @@
-import { useAuiState } from '@assistant-ui/react'
-import { type FC, useEffect, useMemo, useState } from 'react'
+import { type FC, useEffect, useState } from 'react'
 
 import { requestComposerSubmit } from '@/app/chat/composer/focus'
 import { useComposerScope } from '@/app/chat/composer/scope'
@@ -10,6 +9,20 @@ import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
 
 const MAX_CONTEXT_MESSAGES = 8
 const MAX_CONTEXT_CHARS = 8_000
+
+export const buildFollowupContext = (messages: readonly { role: string; content: unknown }[]): string => {
+  const rows = messages.slice(-MAX_CONTEXT_MESSAGES).flatMap(message => {
+    if (message.role !== 'user' && message.role !== 'assistant') {
+      return []
+    }
+
+    const text = messageContentText(message.content as never).trim()
+
+    return text ? [`${message.role}: ${text.slice(-1_000)}`] : []
+  })
+
+  return rows.join('\n').slice(-MAX_CONTEXT_CHARS)
+}
 
 export const parseFollowupSuggestions = (raw: string): string[] => {
   try {
@@ -26,25 +39,9 @@ export const parseFollowupSuggestions = (raw: string): string[] => {
   }
 }
 
-export const FollowUpSuggestions: FC = () => {
-  const messages = useAuiState(state => state.thread.messages)
+export const FollowUpSuggestions: FC<{ context: string; responseId: string }> = ({ context, responseId }) => {
   const scope = useComposerScope()
   const [suggestions, setSuggestions] = useState<string[]>([])
-  const responseId = useAuiState(state => state.message.id)
-
-  const context = useMemo(() => {
-    const rows = messages.slice(-MAX_CONTEXT_MESSAGES).flatMap(message => {
-      if (message.role !== 'user' && message.role !== 'assistant') {
-        return []
-      }
-
-      const text = messageContentText(message.content as never).trim()
-
-      return text ? [`${message.role}: ${text.slice(-1_000)}`] : []
-    })
-
-    return rows.join('\n').slice(-MAX_CONTEXT_CHARS)
-  }, [messages])
 
   useEffect(() => {
     if (!responseId) {

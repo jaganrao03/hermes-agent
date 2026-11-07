@@ -30,7 +30,7 @@ import {
   messageContentText,
   pickPrimaryPreviewTarget
 } from '@/components/assistant-ui/thread/content'
-import { FollowUpSuggestions } from '@/components/assistant-ui/thread/follow-up-suggestions'
+import { buildFollowupContext, FollowUpSuggestions } from '@/components/assistant-ui/thread/follow-up-suggestions'
 import { MessageHoverTime } from '@/components/assistant-ui/thread/message-hover-time'
 import { MESSAGE_PARTS_COMPONENTS } from '@/components/assistant-ui/thread/message-parts'
 import { ReactionPicker } from '@/components/assistant-ui/thread/message-reactions'
@@ -240,12 +240,12 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
   const { t } = useI18n()
 
   // PERF: this component must NOT subscribe to the streaming text, and no
-  // longer subscribes to the streaming STATUS either. Every selector here
-  // returns a value that stays referentially stable across token flushes
-  // (booleans, '' while running), so the 30 Hz delta stream only re-renders
-  // the markdown part and the tiny status leaves — not the footer, the
-  // preview block, or this root.
+  // selector here returns a value that stays referentially stable across token
+  // flushes (booleans, '' while running), so the 30 Hz delta stream only
+  // re-renders the markdown part and the tiny status leaves — not the footer,
+  // the preview block, or this root.
   const hasVisibleText = useAuiState(s => contentHasVisibleText(s.message.content))
+  const isRunning = useAuiState(s => s.message.status?.type === 'running')
   const sessionId = useStore(useSessionView().$runtimeId)
   const approval = useStore(useMemo(() => sessionApprovalRequest(sessionId), [sessionId]))
 
@@ -352,7 +352,9 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
                   messageId={messageId}
                   onBranchInNewChat={onBranchInNewChat}
                 />
-                <FollowUpSuggestions />
+                {!isInterim && !isRunning && (
+                  <FollowUpSuggestions context={buildFollowupContext(threadRuntime.getState().messages)} responseId={messageId} />
+                )}
               </>
             )}
           {/* Last thing in the turn — under the action bar, the way Cursor ends a
