@@ -61,6 +61,7 @@ import { COMPOSER_AREAS } from './contrib'
 import { ComposerControls } from './controls'
 import { ComposerDirectiveActions } from './directive-actions'
 import { COMPOSER_DROP_ACTIVE_CLASS, COMPOSER_DROP_FADE_CLASS } from './drop-affordance'
+import { composerEnterIntent } from './enter-intent'
 import { markActiveComposer, onComposerAttachImagesRequest } from './focus'
 import { HelpHint } from './help-hint'
 import { useAtCompletions } from './hooks/use-at-completions'
@@ -684,6 +685,10 @@ export function ChatBar({
     // this guard, pressing Enter to finalise a Korean/Japanese/Chinese IME
     // preedit fires submitDraft() and splits the message mid-word.
     if (composingRef.current || event.nativeEvent.isComposing) {
+      if (event.key === 'Enter') {
+        event.stopPropagation()
+      }
+
       return
     }
 
@@ -706,6 +711,8 @@ export function ChatBar({
     // "this Enter is an IME commit, not a user send".  If we let it through,
     // the message fires before the committed text is fully in the DOM.
     if (event.key === 'Enter' && event.keyCode === 229) {
+      event.stopPropagation()
+
       return
     }
 
@@ -967,36 +974,23 @@ export function ChatBar({
       return
     }
 
-    // Cmd/Ctrl+Enter queues a follow-up while a turn runs. Plain Enter steers
-    // a text-only draft, so both live-turn actions stay reachable by keyboard.
-    if (event.key === 'Enter' && (event.metaKey || event.ctrlKey) && !event.shiftKey) {
-      event.preventDefault()
+    // Plain Enter inserts a line break. Stop propagation so parent/global
+    // keyboard handlers cannot reinterpret it as a send; preserve the browser's
+    // contentEditable default by not preventing the event.
+    const enterIntent = composerEnterIntent(event.nativeEvent)
 
-      if (busy && !disabled) {
-        // As with plain Enter, source the just-typed content from the DOM so a
-        // fast keypress cannot queue a stale draft.
-        const editorText = liveComposerDraft(editorRef.current, draftRef.current)
-
-        if (editorText !== draftRef.current) {
-          draftRef.current = editorText
-          setComposerText(editorText)
-        }
-
-        queueDraft()
-      }
+    if (enterIntent === 'newline') {
+      event.stopPropagation()
 
       return
     }
 
-    if (event.key === 'Enter' && !event.shiftKey) {
+    // The platform modifier+Enter shortcut submits while idle, queues typed
+    // text while busy, and drains a queued turn when the composer is empty.
+    if (enterIntent === 'submit') {
       event.preventDefault()
+      event.stopPropagation()
 
-      // Decide from the DOM, not React state. `hasComposerPayload` is derived
-      // from the AUI composer state, which lags the latest keystroke by a
-      // render, so on fast typing / IME the just-typed text isn't in state yet.
-      // Without the live read, a real message typed while prompts are queued
-      // would drain the queue instead of sending. submitDraft() re-syncs and
-      // sends the live editor text.
       const editorText = liveComposerDraft(editorRef.current, draftRef.current)
       const hasLivePayload = editorText.trim().length > 0 || attachments.length > 0
 
@@ -1004,27 +998,35 @@ export function ChatBar({
         return
       }
 
-      if (!busy && !hasLivePayload && queuedPrompts.length > 0) {
-        void drainNextQueued()
+      if (busy && hasLivePayload) {
+        // Source just-typed content from the DOM so a fast keypress cannot
+        // queue a stale draft.
+
+        if (editorText !== draftRef.current) {
+          draftRef.current = editorText
+          setComposerText(editorText)
+        }
+
+        queueDraft()
 
         return
       }
 
-      // Empty Enter while busy. With prompts queued this is the double-send:
-      // the first Enter put the words in the queue, a second delivers them
-      // now — steered into the live turn when a steer can carry them, else
-      // promote + interrupt + drain on settle — mirroring the idle empty-Enter
-      // drain above. With nothing queued it stays a no-op — interrupting is
-      // explicit (Stop/Esc), never a stray Enter after sending. Gate on the live
-      // DOM payload (not the render-lagged composer state) so a message typed
-      // fast / via IME while busy still reaches submitDraft() and gets queued
-      // instead of being mistaken for an empty Enter.
-      if (busy && !hasLivePayload) {
+      if (busy) {
+        // Empty modifier+Enter with a queued prompt is the double-send: the
+        // first modifier+Enter queued it; the second delivers it now. With no
+        // queued prompt, submission stays a no-op — Stop/Esc remain explicit.
         const head = queuedPrompts.find(entry => entry.id !== queueEdit?.entryId)
 
         if (head) {
           void deliverQueuedNow(head.id)
         }
+
+        return
+      }
+
+      if (!hasLivePayload && queuedPrompts.length > 0) {
+        void drainNextQueued()
 
         return
       }

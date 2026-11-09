@@ -33,6 +33,7 @@ import qrcode from 'qrcode-terminal';
 import { matchesAllowedSender, matchesAllowedUser, matchesInboundWhatsAppGroup, parseAllowedUsers } from './allowlist.js';
 import { createOutboundIdTracker } from './outbound_ids.js';
 import { classifyOwnerMessageGate } from './owner_message_gate.js';
+import { createContactNameLookup, createInboxLog, describeMessage, shouldLogInboxMessage } from './inbox_log.js';
 import {
   addMentions,
   buildPollPayload,
@@ -96,6 +97,12 @@ const SEND_READ_RECEIPTS =
 
 const PORT = parseInt(getArg('port', '3000'), 10);
 const SESSION_DIR = getArg('session', path.join(process.env.HOME || '~', '.hermes', 'whatsapp', 'session'));
+const SESSION_PATH = SESSION_DIR.startsWith('~/')
+  ? path.join(process.env.HOME || '~', SESSION_DIR.slice(2))
+  : SESSION_DIR;
+const INBOX_LOG_PATH = path.join(path.dirname(path.resolve(SESSION_PATH)), 'state', 'inbox.jsonl');
+const CONTACTS_PATH = path.join(path.dirname(path.resolve(SESSION_PATH)), 'contacts.json');
+const inboxLog = createInboxLog(INBOX_LOG_PATH);
 // Cache directories: the Python gateway passes the profile-aware paths via
 // env (HERMES_HOME-aware, new cache/ layout).  Fall back to the legacy
 // hardcoded locations for bridges launched outside the gateway.
@@ -332,6 +339,7 @@ function enqueuePollUpdateEvent({ key, update, selectedOptions, aggregation }) {
     }
     return;
   }
+
   const chosenText = selectedOptions.length ? selectedOptions.join(', ') : `[Poll update${pollId ? `: ${pollId}` : ''}]`;
   const dedupeId = `poll:${pollId}:${senderId}:${selectedOptions.join('|')}`;
   if (recentlyProcessedPollUpdates.has(dedupeId)) return;
@@ -662,6 +670,30 @@ async function startSocket() {
           } catch {}
           continue;
         }
+        // Log inbound summaries before DM/group allowlist filtering for the local inbox.
+        if (shouldLogInboxMessage({ fromMe: !!msg.key.fromMe })) {
+          try {
+            const described = describeMessage(getMessageContent(msg));
+            const rawTs = msg.messageTimestamp;
+            const tsNum = typeof rawTs === 'number' ? rawTs : Number(rawTs?.toString?.() ?? 0);
+            inboxLog.append({
+              ts: tsNum > 1e11 ? tsNum : (tsNum > 0 ? tsNum * 1000 : Date.now()),
+              chatId,
+              senderId: resolvedSenderId || senderId,
+              senderName: msg.pushName || '',
+              fromMe: false,
+              messageId: msg.key.id || '',
+              body: described.body,
+              mediaType: described.mediaType,
+              hasMedia: described.hasMedia,
+              kind: described.kind,
+              ...(described.protocolType ? { protocolType: described.protocolType } : {}),
+              ...(described.deletedMessageId ? { deletedMessageId: described.deletedMessageId } : {}),
+            });
+          } catch (err) {
+            console.warn(`[bridge] inbox log write failed: ${err.message}`);
+          }
+        }
         const intakeAllowed = isGroup
           ? matchesInboundWhatsAppGroup({
               chatId,
@@ -849,6 +881,88 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Read-only conversation search endpoint. Never use /messages here: that
+// endpoint drains messageQueue and would steal inbound events from Hermes.
+app.get('/inbox', (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 100000);
+  const chatId = typeof req.query.chatId === 'string' && req.query.chatId ? req.query.chatId : null;
+  const since = parseInt(req.query.since, 10) || 0;
+  try {
+    const records = inboxLog.read({ limit, chatId, since }).map((record) => ({
+      ...record,
+      name: displayNameFor(record.chatId, record.senderId) || record.senderName || '',
+    }));
+    res.json({ count: records.length, self: selfIdentity(), records });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/inbox/chats', (req, res) => {
+  const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+  const scan = Math.min(Math.max(parseInt(req.query.scan, 10) || 20000, 100), 100000);
+  try {
+    const byChat = new Map();
+    for (const record of inboxLog.read({ limit: scan })) {
+      let row = byChat.get(record.chatId);
+      if (!row) {
+        row = {
+          chatId: record.chatId,
+          isGroup: record.chatId.endsWith('@g.us'),
+          inbound: 0,
+          outbound: 0,
+          lastInboundTs: 0,
+          firstTs: record.ts,
+        };
+        byChat.set(record.chatId, row);
+      }
+      if (record.fromMe) row.outbound += 1;
+      else row.inbound += 1;
+      if (!record.fromMe && record.kind !== 'protocol' && record.kind !== 'reaction') {
+        row.lastInboundTs = record.ts;
+      }
+      if (record.kind !== 'protocol' && record.kind !== 'reaction') {
+        row.lastTs = record.ts;
+        row.lastBody = record.body || '';
+        row.lastKind = record.kind || 'text';
+        row.lastFromMe = !!record.fromMe;
+        row.lastSenderId = record.senderId || '';
+        row.lastSenderName = record.senderName || '';
+        row.lastMessageId = record.messageId || '';
+      }
+    }
+    const chats = [...byChat.values()]
+      .filter((row) => row.lastTs)
+      .map((row) => ({
+        ...row,
+        name: displayNameFor(row.chatId, row.lastSenderId)
+          || row.lastSenderName
+          || String(row.chatId).split('@')[0],
+      }))
+      .sort((a, b) => b.lastTs - a.lastTs)
+      .slice(0, limit);
+    res.json({ count: chats.length, self: selfIdentity(), chats });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/self', (req, res) => {
+  res.json(selfIdentity());
+});
+
+function selfIdentity() {
+  const id = String(sock?.user?.id || '');
+  return {
+    id,
+    lid: String(sock?.user?.lid || ''),
+    name: String(sock?.user?.name || ''),
+    number: id.split(/[:@]/)[0],
+  };
+}
+
+const displayNameFor = createContactNameLookup(CONTACTS_PATH);
 
 // Poll for new messages (long-poll style)
 app.get('/messages', (req, res) => {
@@ -1049,6 +1163,12 @@ app.post('/send-poll', async (req, res) => {
     const sent = await sendWithTimeout(chatId, payload);
     trackSentMessageId(sent);
     rememberSentMessage(sent, payload);
+    enqueuePollSnapshot({
+      pollId: sent?.key?.id,
+      chatId,
+      question: payload.poll.name,
+      aggregation: payload.poll.values.map(name => ({ name, voters: [] })),
+    });
     res.json({ success: true, messageId: sent?.key?.id });
   } catch (err) {
     res.status(400).json({ error: err.message });

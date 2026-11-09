@@ -23,6 +23,7 @@ from tools.mcp_tool_content import (
     _truncate_mcp_text_result)
 from tools.mcp_tool_errors import (
     _auth_error_detail, _is_auth_error, _is_session_expired_error, _mcp_call_failed_message)
+from tools.mcp_tool_buy_guard import buy_submission_error
 
 logger = logging.getLogger("tools.mcp_tool")
 _MISSING = object()
@@ -697,6 +698,10 @@ def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float, *,
     op = f"tools/call {tool_name}"
 
     def _handler(args: dict, **kwargs) -> Any:
+        # BUY submissions must fail before approval prompts, lazy server startup, or RPC dispatch.
+        guard_error = buy_submission_error(server_name, tool_name, args)
+        if guard_error is not None:
+            return guard_error
         # Security boundary: untrusted-server write tools need approval before ANY transport work (incl. lazy spawn).
         booked: list = []  # a costed call's charge; refunded when the call never reaches the server
         error = _trust_gate_check(server_name, tool_name, booked, args)

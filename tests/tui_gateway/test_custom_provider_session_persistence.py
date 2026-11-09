@@ -876,6 +876,26 @@ def _agent_like(model="deepseek/deepseek-v4-flash-0731", provider=""):
 
 
 class TestRuntimeModelConfigDropsStaleKeys:
+    def test_live_switch_replaces_nested_gateway_route_before_resume(self):
+        """A stale gateway snapshot must not override the Desktop's new route."""
+        from tui_gateway.server import _runtime_model_config, _stored_session_runtime_overrides
+
+        agent = _agent_like(model="gpt-6-luna", provider="openai-codex")
+        agent.base_url = "https://chatgpt.com/backend-api/codex"
+        agent.api_mode = "codex_responses"
+        existing = {"gateway_runtime": {
+            "provider": "deepseek", "base_url": "https://api.deepseek.com/v1",
+            "api_mode": "chat_completions", "fallback_active": False},
+            "unrelated_metadata": {"keep": True}}
+        config = _runtime_model_config(agent, existing)
+        overrides = _stored_session_runtime_overrides({
+            "model": agent.model, "model_config": config})
+        assert overrides["provider_override"] == "openai-codex"
+        assert overrides["model_override"]["base_url"] == agent.base_url
+        assert overrides["model_override"]["api_mode"] == "codex_responses"
+        assert config["unrelated_metadata"] == {"keep": True}
+        assert existing["gateway_runtime"]["provider"] == "deepseek"
+
     def test_falsy_provider_drops_stale_existing_provider(self):
         """Agent inherits the profile default (empty provider): the previously
         persisted provider must NOT survive the merge."""

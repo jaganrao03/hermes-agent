@@ -1097,6 +1097,10 @@ async def _materialize_video(video_url: str, task_id: Optional[str], temp_paths:
     if local_path.is_file():
         from agent.file_safety import raise_if_read_blocked
         raise_if_read_blocked(str(local_path))
+        from tools.image_source import _profile_media_confine_error
+        confine_reason = _profile_media_confine_error(local_path)
+        if confine_reason:
+            raise PermissionError(confine_reason)
         logger.info("Using local video file: %s", video_url)
         return local_path
     if await _validate_image_url_async(video_url):

@@ -14,9 +14,11 @@ import { getAggregateVotesInPollMessage } from '@whiskeysockets/baileys';
 
 import {
   addMentions,
+  buildPollSnapshot,
   buildPollPayload,
   buildTextSendPayload,
   createBoundedMessageStore,
+  createPollSnapshotQueue,
   extractBridgeEvent,
   inboundReadReceiptKeys,
   mediaPayloadForFile,
@@ -486,6 +488,39 @@ import {
     ],
   );
   console.log('  ✓ encrypted poll upserts are wrapped into Baileys aggregation shape');
+}
+
+// -- poll snapshots are bounded and drain independently -------------------
+{
+  const snapshot = buildPollSnapshot({
+    pollId: 'poll-1',
+    chatId: '120363001234567890@g.us',
+    question: 'Game Today At 6 PM',
+    ts: 1234,
+    aggregation: [
+      { name: 'Yes', voters: ['15550001111:31@s.whatsapp.net', '15550002222@s.whatsapp.net'] },
+      { name: 'No', voters: ['15550001111@s.whatsapp.net'] },
+    ],
+  });
+  assert.deepEqual(snapshot, {
+    pollId: 'poll-1',
+    chatId: '120363001234567890@g.us',
+    ts: 1234,
+    question: 'Game Today At 6 PM',
+    counts: { Yes: 2, No: 1 },
+    voters: [
+      { id: '15550001111@s.whatsapp.net', name: '15550001111@s.whatsapp.net', options: ['Yes', 'No'] },
+      { id: '15550002222@s.whatsapp.net', name: '15550002222@s.whatsapp.net', options: ['Yes'] },
+    ],
+  });
+
+  const queue = createPollSnapshotQueue(2);
+  queue.push(snapshot);
+  queue.push({ pollId: 'poll-2' });
+  queue.push({ pollId: 'poll-3' });
+  assert.deepEqual(queue.drain().map(row => row.pollId), ['poll-2', 'poll-3']);
+  assert.deepEqual(queue.drain(), []);
+  console.log('  ✓ poll snapshots tally voters, stay bounded, and drain independently');
 }
 
 // -- media download failure containment (port of nanoclaw#2895) -----------

@@ -2681,7 +2681,7 @@ export const ruOverrides = {
       'composer.mention': 'ссылки на файлы, папки, URL, git',
       'composer.slash': 'палитра слэш-команд',
       'composer.help': 'эта быстрая справка (удалите, чтобы закрыть)',
-      'composer.sendNewline': 'отправить · Shift+Enter — новая строка',
+      'composer.sendNewline': 'новая строка · модификатор+Enter — отправить',
       'composer.sendQueued': 'отправить следующий ход в очереди',
       'keybinds.openPanel': 'все горячие клавиши',
       'composer.cancel': 'закрыть поповер · отменить запуск',

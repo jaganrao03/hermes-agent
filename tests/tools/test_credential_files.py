@@ -32,6 +32,45 @@ def _clean_state():
 
 
 class TestRegisterCredentialFiles:
+    @pytest.mark.parametrize("name", ["config.yaml", "config.yaml.bak-before-access-setup-20261105",
+                                      "state.db", "state.db-wal", "state.db-journal", "auth.json",
+                                      ".env", ".env.local", ".env.lock", "kanban.db", "projects.db",
+                                      "shared-state.db", "webhook_subscriptions.json", "auth.lock",
+                                      "gateway_state.json", "install_id", "context_length_cache.yaml"])
+    def test_hermes_control_stores_are_never_mountable(self, tmp_path, name):
+        """A skill frontmatter mount must not expose Hermes' own config or state stores.
+
+        config.yaml is read-denied only for the launch home and state DBs differ per
+        profile, so the passthrough surface enforces its own refusal.
+        """
+        hermes_home = tmp_path / ".hermes"
+        hermes_home.mkdir()
+        (hermes_home / name).write_text("secret\n")
+        with patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}):
+            assert register_credential_file(name) is False
+            assert get_credential_file_mounts() == []
+
+    @pytest.mark.parametrize("rel", ["sessions/abc.json", "mcp-tokens/tok.json", "vault/note.md",
+                                     "pairing/x.json", "cron/jobs.json", "memories/notes.db",
+                                     "checkpoints/step-1", "logs/gateway.log", "skills/x/SKILL.md",
+                                     "browser-profile/Cookies", ".curator_backups/x.yaml"])
+    def test_control_directories_are_never_mountable(self, tmp_path, rel):
+        hermes_home = tmp_path / ".hermes"
+        (hermes_home / rel).parent.mkdir(parents=True)
+        (hermes_home / rel).write_text("secret\n")
+        with patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}):
+            assert register_credential_file(rel) is False
+
+    def test_service_token_still_mountable(self, tmp_path):
+        """The refusal is targeted: the real-world skill tokens keep working."""
+        hermes_home = tmp_path / ".hermes"
+        hermes_home.mkdir(parents=True)
+        for name in ("google_token.json", "google_client_secret.json", "gmail-credentials.json"):
+            (hermes_home / name).write_text("{}\n")
+        with patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}):
+            for name in ("google_token.json", "google_client_secret.json", "gmail-credentials.json"):
+                assert register_credential_file(name) is True
+
     def test_dict_with_path_key(self, tmp_path):
         hermes_home = tmp_path / ".hermes"
         hermes_home.mkdir()

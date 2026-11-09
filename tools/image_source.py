@@ -82,6 +82,9 @@ async def resolve_image_source(
     host_target = _permitted_host_read_target(p, ctx)
     if host_target is not None and host_target.is_file():
         _guard_credential_read(host_target, s)
+        confine_reason = _profile_media_confine_error(host_target)
+        if confine_reason:
+            raise SourceUnsafe(confine_reason, src=s, origin="file")
         # Videos are never downscaled and video_analyze refuses over 50 MB of base64, so the
         # larger host budget only helps images; videos keep the ingest cap and fail at the stat.
         cap = _MAX_HOST_READ_BYTES if "image" in permitted else _MAX_INGEST_BYTES
@@ -112,6 +115,66 @@ def _read_host_bytes_bounded(path: Path, src: str, cap: int) -> bytes:
                 raise SourceTooLarge("media exceeds size limit", src=src, origin="file")
             data = b"".join(parts)
     return data
+
+
+def _profile_media_roots() -> Optional[list[Path]]:
+    """Host roots a SECONDARY profile may read media from; ``None`` = unconfined (owner profile).
+
+    A multiplexed gateway serves other people's profiles out of the owner's process, so "the
+    process can read it" is not authorization. Without this, image/video tools handed any
+    host-readable path (the owner's photos, scans, screenshots) straight to a model. Paths are
+    confined to the profile's own home plus the folders its config explicitly shares with it
+    (``terminal.docker_volumes`` sources) — the same set its sandbox can see.
+    """
+    try:
+        from hermes_constants import get_hermes_home_override, get_process_hermes_home
+    except Exception:
+        return None
+    override = get_hermes_home_override()
+    if override is None:
+        return None
+    try:
+        home = Path(override).resolve()
+        # get_hermes_home() would return the override itself (it prefers the contextvar), so the
+        # LAUNCH home has to come from the process-level resolver; equal means "owner serving
+        # itself", which stays unconfined.
+        launch = Path(get_process_hermes_home()).resolve()
+    except Exception:
+        return None
+    if home == launch:
+        return None
+    roots = [home]
+    try:
+        from hermes_cli.config import load_config
+        raw_cfg = load_config()
+    except Exception:
+        return roots
+    cfg = raw_cfg if isinstance(raw_cfg, dict) else {}
+    terminal = cfg.get("terminal") if isinstance(cfg.get("terminal"), dict) else {}
+    for volume in terminal.get("docker_volumes") or []:
+        source = str(volume).split(":", 1)[0].strip()
+        if source.startswith("/"):
+            roots.append(Path(source))
+    return roots
+
+
+def _profile_media_confine_error(target: Path) -> Optional[str]:
+    """Reason string when ``target`` is outside the active profile's readable roots, else None."""
+    roots = _profile_media_roots()
+    if roots is None:
+        return None
+    try:
+        resolved = target.resolve()
+    except Exception:
+        resolved = target
+    for root in roots:
+        try:
+            if resolved == root or resolved.is_relative_to(root):
+                return None
+        except Exception:
+            continue
+    return ("media path is outside this profile's allowed roots: only its own home and the "
+            "folders explicitly shared with it are readable")
 
 
 def _guard_credential_read(host_target: Path, src: str) -> None:

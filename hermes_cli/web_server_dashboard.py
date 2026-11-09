@@ -217,8 +217,10 @@ def mount_spa(application: FastAPI):
         )
         if prefix:
             # Rewrite absolute asset URLs baked into the Vite build to go through the proxy.
-            for attr in ('href="/assets/', 'src="/assets/', 'href="/favicon.ico"', 'href="/fonts/',
-                         'href="/ds-assets/', 'src="/ds-assets/'):
+            for attr in (
+                'href="/assets/', 'src="/assets/', 'href="/favicon.ico"', 'href="/manifest.webmanifest"',
+                'href="/fonts/', 'href="/ds-assets/', 'src="/ds-assets/'
+            ):
                 html = html.replace(attr, attr.replace('"/', f'"{prefix}/', 1))
         theme_bootstrap = _render_active_theme_bootstrap_css()
         if theme_bootstrap:

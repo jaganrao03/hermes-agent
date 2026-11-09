@@ -30,7 +30,7 @@ import {
   messageContentText,
   pickPrimaryPreviewTarget
 } from '@/components/assistant-ui/thread/content'
-import { buildFollowupContext, FollowUpSuggestions } from '@/components/assistant-ui/thread/follow-up-suggestions'
+import { FollowUpSuggestions } from '@/components/assistant-ui/thread/follow-up-suggestions'
 import { MessageHoverTime } from '@/components/assistant-ui/thread/message-hover-time'
 import { MESSAGE_PARTS_COMPONENTS } from '@/components/assistant-ui/thread/message-parts'
 import { ReactionPicker } from '@/components/assistant-ui/thread/message-reactions'
@@ -239,14 +239,39 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
   const responseTail = responseIds.length === 0 || responseIds.at(-1) === messageId
   const { t } = useI18n()
 
-  // PERF: this component must NOT subscribe to the streaming text, and no
+  // PERF: this component must NOT subscribe to the streaming text; every
   // selector here returns a value that stays referentially stable across token
   // flushes (booleans, '' while running), so the 30 Hz delta stream only
   // re-renders the markdown part and the tiny status leaves — not the footer,
   // the preview block, or this root.
   const hasVisibleText = useAuiState(s => contentHasVisibleText(s.message.content))
   const isRunning = useAuiState(s => s.message.status?.type === 'running')
-  const sessionId = useStore(useSessionView().$runtimeId)
+  const isLastMessage = useAuiState(s => s.thread.messages.at(-1)?.id === s.message.id)
+
+  // The gateway's own turn time for the latest user message, in Unix seconds.
+  // Only `timelineTimestamp` counts: createdAt falls back to *now* for a
+  // timestamp-less row, which would make every cached suggestion look stale.
+  const latestUserTimestamp = useAuiState(s => {
+    for (let index = s.thread.messages.length - 1; index >= 0; index -= 1) {
+      const message = s.thread.messages[index]
+
+      if (message.role !== 'user') {
+        continue
+      }
+
+      const value = (message.metadata?.custom as { timelineTimestamp?: unknown } | undefined)?.timelineTimestamp
+
+      return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined
+    }
+
+    return undefined
+  })
+
+  const sessionView = useSessionView()
+  const sessionId = useStore(sessionView.$runtimeId)
+  const storedSessionId = useStore(sessionView.$storedId)
+  const followUpSessionId = storedSessionId || sessionId || ''
+  const followUpFallbackSessionId = storedSessionId && sessionId && storedSessionId !== sessionId ? sessionId : undefined
   const approval = useStore(useMemo(() => sessionApprovalRequest(sessionId), [sessionId]))
 
   const activityOnly = useAuiState(
@@ -352,8 +377,12 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
                   messageId={messageId}
                   onBranchInNewChat={onBranchInNewChat}
                 />
-                {!isInterim && !isRunning && (
-                  <FollowUpSuggestions context={buildFollowupContext(threadRuntime.getState().messages)} responseId={messageId} />
+                {isLastMessage && !isInterim && !isRunning && (
+                  <FollowUpSuggestions
+                    fallbackSessionId={followUpFallbackSessionId}
+                    freshAfter={latestUserTimestamp}
+                    sessionId={followUpSessionId}
+                  />
                 )}
               </>
             )}

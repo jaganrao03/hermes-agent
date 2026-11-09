@@ -18,6 +18,8 @@ def test_search_does_not_create_current_storage_for_empty_or_foreign_reads(tmp_p
     monkeypatch.setenv("HERMES_HOME", str(home))
     token = set_hermes_home_override(home)
     handler = registry.get_entry("session_search").handler
+    # This is a storage-side-effect test; authorize foreign reads explicitly.
+    (home / "config.yaml").write_text("session_search: {allow_cross_profile: true}\n")
     try:
         empty = json.loads(handler({}))
         assert not (home / "state.db").exists(), "a reader created the canonical database"

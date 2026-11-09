@@ -107,7 +107,7 @@ def finish_completed_run(d, fire_owner: Optional[str], execution_id: str, *, rec
     from cron.delivery_outcome import settle_quietly, settled_outcome
     if delivery_outcome == "queued":
         # A drain that already finished this send (cron/delivery_outcome.py) is the real outcome.
-        delivery_outcome = settled_outcome(execution_id) or "queued"
+        delivery_outcome = settled_outcome(execution_id, job.get("id")) or "queued"
     if delivery_outcome in ("delivered", "not_configured") and not d.success:
         # Failure ping left the process (or had a configured target): mark the incident alerted.
         scheduler._mark_incident_alerted(d.failure_incident_id)

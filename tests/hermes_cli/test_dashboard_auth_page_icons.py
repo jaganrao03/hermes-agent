@@ -18,9 +18,17 @@ def gated_webapp(monkeypatch, tmp_path):
     """The gateway's Webapp behind the sign-in gate, serving a renderer dist with its icons."""
     dist = tmp_path / "dist-webapp"
     dist.mkdir()
-    (dist / "index.html").write_text("<!doctype html><title>Hermes</title>", encoding="utf-8")
-    for name in ("apple-touch-icon.png", "favicon.ico", "hermes.png"):
+    (dist / "index.html").write_text(
+        '<!doctype html><link rel="manifest" href="/manifest.webmanifest"><title>Hermes</title>',
+        encoding="utf-8",
+    )
+    for name in (
+        "apple-touch-icon.png", "favicon.ico", "hermes.png", "hermes-pwa-192.png", "hermes-pwa-512.png",
+    ):
         (dist / name).write_bytes(b"\x89PNG icon bytes")
+    (dist / "manifest.webmanifest").write_text(
+        '{"name":"Hermes","display":"standalone"}', encoding="utf-8"
+    )
     clear_providers()
     register_provider(StubAuthProvider())
     for key, value in (("bound_host", "0.0.0.0"), ("bound_port", 9119), ("auth_required", True),
@@ -31,12 +39,27 @@ def gated_webapp(monkeypatch, tmp_path):
     clear_providers()
 
 
-@pytest.mark.parametrize("path", ["/apple-touch-icon.png", "/favicon.ico"])
-def test_page_icons_answer_without_a_session(gated_webapp, path):
+@pytest.mark.parametrize("path", [
+    "/apple-touch-icon.png", "/favicon.ico", "/manifest.webmanifest",
+    "/hermes-pwa-192.png", "/hermes-pwa-512.png",
+])
+def test_installation_assets_answer_without_a_session(gated_webapp, path):
     response = gated_webapp.get(path, follow_redirects=False)
 
     assert response.status_code == 200, response.headers.get("location")
-    assert response.content == b"\x89PNG icon bytes"
+    if path == "/manifest.webmanifest":
+        assert response.json()["display"] == "standalone"
+    else:
+        assert response.content == b"\x89PNG icon bytes"
+
+
+def test_manifest_link_uses_proxy_prefix(gated_webapp, monkeypatch):
+    with monkeypatch.context() as patcher:
+        patcher.setattr(web_server.app.state, "auth_required", False)
+        response = gated_webapp.get("/", headers={"x-forwarded-prefix": "/hermes"})
+
+    assert response.status_code == 200
+    assert 'href="/hermes/manifest.webmanifest"' in response.text
 
 
 @pytest.mark.parametrize("path", ["/hermes.png", "/apple-touch-icon.png.map", "/apple-touch-icon.pngx"])
@@ -47,8 +70,11 @@ def test_other_files_still_require_sign_in(gated_webapp, path):
     assert "/login" in response.headers["location"]
 
 
-@pytest.mark.parametrize("path", ["/apple-touch-icon.png", "/favicon.ico"])
-def test_missing_page_icon_is_a_404_not_the_page(gated_webapp, path):
+@pytest.mark.parametrize("path", [
+    "/apple-touch-icon.png", "/favicon.ico", "/manifest.webmanifest",
+    "/hermes-pwa-192.png", "/hermes-pwa-512.png",
+])
+def test_missing_installation_asset_is_a_404_not_the_page(gated_webapp, path):
     (web_server.app.state.web_dist / path.lstrip("/")).unlink()
 
     response = gated_webapp.get(path, follow_redirects=False)

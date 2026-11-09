@@ -1,5 +1,5 @@
 import { useStore } from '@nanostores/react'
-import { type ReactNode, useEffect } from 'react'
+import { type ReactNode, useEffect, useState } from 'react'
 
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -8,6 +8,13 @@ import { COMPLETION_SOUND_VARIANTS, previewCompletionSound } from '@/lib/complet
 import { triggerHaptic } from '@/lib/haptics'
 import { hostHas } from '@/lib/host-capabilities'
 import { Bell, Play } from '@/lib/icons'
+import {
+  disablePwaPush,
+  enablePwaPush,
+  pwaPushState,
+  type PwaPushState,
+  sendTestPwaPush
+} from '@/lib/pwa-push'
 import { cn } from '@/lib/utils'
 import {
   $browserNotificationPermission,
@@ -67,6 +74,48 @@ function BrowserPermissionRow() {
   )
 }
 
+/**
+ * Webapp only: real Web Push, so a finished reply reaches the phone with the app
+ * closed. Everything above runs in the page and dies with the tab; this one
+ * subscribes a service worker, and the pwa-push plugin pushes through it.
+ */
+function BackgroundPushRow() {
+  const [state, setState] = useState<PwaPushState | null>(null)
+  const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    void pwaPushState().then(setState)
+  }, [])
+
+  if (state === null || state === 'unsupported' || state === 'insecure') {
+    return null
+  }
+
+  const description =
+    state === 'on'
+      ? 'On — Hermes can alert this device even when the app is closed.'
+      : state === 'denied'
+        ? 'Blocked by the browser. Allow notifications for this site in the browser settings.'
+        : 'Get a notification on this device when a reply finishes while the app is closed.'
+
+  return (
+    <ToggleRow
+      checked={state === 'on'}
+      description={description}
+      disabled={busy || state === 'denied'}
+      id="setting-background-push"
+      label="Background notifications"
+      onChange={next => {
+        setBusy(true)
+        void (next ? enablePwaPush() : disablePwaPush())
+          .then(setState)
+          .catch(() => setState('error'))
+          .finally(() => setBusy(false))
+      }}
+    />
+  )
+}
+
 interface NotificationsSettingsProps {
   subpage?: string
 }
@@ -87,6 +136,12 @@ export function NotificationsSettings({ subpage }: NotificationsSettingsProps = 
 
     if (hostHas('browserNotifications')) {
       await askBrowserNotificationPermission()
+
+      // Test the one path that works with the app closed, when it is on: the
+      // in-tab notification below only proves the tab can show one.
+      if ((await pwaPushState()) === 'on') {
+        await sendTestPwaPush()
+      }
     }
 
     const ok = await sendTestNativeNotification(copy.testTitle, copy.testBody)
@@ -109,6 +164,8 @@ export function NotificationsSettings({ subpage }: NotificationsSettingsProps = 
           />
 
           {hostHas('browserNotifications') && <BrowserPermissionRow />}
+
+          {hostHas('browserNotifications') && <BackgroundPushRow />}
 
           {NATIVE_NOTIFICATION_KINDS.map(kind => (
             <ToggleRow

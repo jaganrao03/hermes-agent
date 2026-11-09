@@ -4,9 +4,15 @@
 from __future__ import annotations
 
 import json
+import os
+import re
+import stat
+from datetime import datetime, UTC
 from typing import List, Optional
 
+from hermes_constants import get_hermes_home
 from tools import write_approval as wa
+from utils import atomic_json_write
 
 
 def _fmt_state(subsystem: str) -> str:
@@ -16,15 +22,18 @@ def _fmt_state(subsystem: str) -> str:
 
 def _fmt_pending_list(subsystem: str) -> str:
     records = wa.list_pending(subsystem)
-    if not records:
+    visible = {r["id"] for r in records}
+    unreadable = sorted(p.stem for p in wa._pending_files(subsystem) if p.stem not in visible)
+    if not records and not unreadable:
         return f"No pending {subsystem} writes."
-    lines = [f"Pending {subsystem} writes ({len(records)}):"]
+    lines = [f"Pending {subsystem} writes ({len(records) + len(unreadable)}):"]
     for r in records:
         origin = r.get("origin", "foreground")
         tag = " [auto]" if origin == "background_review" else ""
         lines.append(f"  {r['id']}{tag}  {r.get('summary', '')}")
         if subsystem == wa.MEMORY:
             lines.extend(f"      {line}" for line in _matched_entries(r["payload"]))
+    lines.extend(f"  {pending_id}  [unreadable legacy file; use reject all]" for pending_id in unreadable)
     lines.append("")
     lines.append(f"Apply: /{subsystem} approve <id>   Reject: /{subsystem} reject <id>")
     if subsystem == wa.SKILLS:
@@ -61,10 +70,96 @@ def _usage(subsystem: str) -> str:
     return f"Usage: /{subsystem} approve|reject <id>  (or 'all')"
 
 
+def _receipt(subsystem: str, pending_id: str, action: str, outcome: str) -> bool:
+    """Append only fixed metadata; never include the proposal or error text."""
+    if subsystem not in (wa.SKILLS, wa.MEMORY) or not re.fullmatch(wa.PENDING_ID_RE, pending_id):
+        return False
+    event = {"timestamp": datetime.now(UTC).isoformat(), "subsystem": subsystem,
+             "pending_id": pending_id, "action": action, "outcome": outcome}
+    try:
+        path = get_hermes_home() / "pending" / "approval-audit.jsonl"
+        path.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0)
+                     | getattr(os, "O_NONBLOCK", 0), 0o600)
+        with os.fdopen(fd, "a", encoding="utf-8") as stream:
+            if not stat.S_ISREG(os.fstat(stream.fileno()).st_mode):
+                return False
+            if hasattr(os, "fchmod"):
+                os.fchmod(stream.fileno(), 0o600)
+            stream.write(json.dumps(event, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        return True
+    except Exception:
+        return False
+
+
+def _claim(subsystem: str, pending_id: str, action: str) -> str:
+    """Persist an exclusive attempt before any side effect; never retry uncertainty."""
+    if subsystem not in (wa.SKILLS, wa.MEMORY) or not re.fullmatch(wa.PENDING_ID_RE, pending_id):
+        return "Invalid pending write ID."
+    directory = get_hermes_home() / "pending" / "approval-attempts" / subsystem
+    marker = directory / (pending_id + ".json")
+    try:
+        directory.mkdir(parents=True, mode=0o700, exist_ok=True)
+        event = {"timestamp": datetime.now(UTC).isoformat(), "subsystem": subsystem,
+                 "pending_id": pending_id, "action": action, "outcome": "attempt"}
+        fd = os.open(marker, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            stream.write(json.dumps(event, separators=(",", ":")) + "\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        if hasattr(os, "O_DIRECTORY"):
+            # Persist each newly created directory entry, not just the marker itself.
+            for parent in (directory, directory.parent, directory.parent.parent, get_hermes_home()):
+                directory_fd = os.open(parent, os.O_RDONLY | os.O_DIRECTORY)
+                try:
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+        return ""
+    except FileExistsError:
+        if action == "reject":
+            try:
+                prior = json.loads(marker.read_text(encoding="utf-8"))
+            except Exception:
+                return f"{pending_id}: prior or concurrent attempt; reconcile its outcome before rejection."
+            recoverable = prior.get("action") == "approve" and prior.get("outcome") in {
+                "apply_failed_or_partial", "invalid_after_claim", "interrupted_unknown",
+            }
+            retry_reject = prior.get("action") == "reject" and prior.get("outcome") == "cleanup_failed"
+            if recoverable or retry_reject:
+                return ""
+            return f"{pending_id}: prior or concurrent attempt; reconcile its outcome before rejection."
+        return f"{pending_id}: prior or concurrent attempt; reconcile its outcome before any retry."
+    except Exception:
+        return f"{pending_id}: could not persist attempt marker; no action taken; reconcile before retry."
+
+
+def _update_claim(subsystem: str, pending_id: str, action: str, outcome: str) -> bool:
+    """Persist a terminal decision so reject cannot race an in-flight approval."""
+    marker = get_hermes_home() / "pending" / "approval-attempts" / subsystem / (pending_id + ".json")
+    try:
+        event = json.loads(marker.read_text(encoding="utf-8"))
+        if (event.get("subsystem"), event.get("pending_id"), event.get("action")) != (
+            subsystem, pending_id, action
+        ) or event.get("outcome") != "attempt":
+            return False
+        event["outcome"] = outcome
+        atomic_json_write(marker, event)
+        return True
+    except Exception:
+        return False
+
+
 def _approve(subsystem: str, rest: list[str], memory_store) -> str:
     if not rest:
         return _usage(subsystem)
     target = rest[0]
+    if target.lower() != "all" and not re.fullmatch(wa.PENDING_ID_RE, target):
+        return "Invalid pending write ID."
+    if subsystem == wa.MEMORY and memory_store is None:
+        return "Memory store unavailable; no approval attempted."
     records = wa.list_pending(subsystem)
     if not records:
         return f"No pending {subsystem} writes."
@@ -76,17 +171,45 @@ def _approve(subsystem: str, rest: list[str], memory_store) -> str:
             return f"No pending {subsystem} write with id '{target}'."
         targets = [rec]
 
-    applied, failed, overwritten, patched, removed = 0, [], [], [], []
+    applied, failed, overwritten, patched, removed, audit_failed = 0, [], [], [], [], False
     for rec in targets:
-        ok, msg, result = _apply_one(subsystem, rec, memory_store)
+        error = _claim(subsystem, rec["id"], "approve")
+        if error:
+            failed.append(error)
+            continue
+        pending_id = rec["id"]
+        rec = wa.get_pending(subsystem, pending_id)
+        if rec is None:
+            failed.append("Pending write disappeared or became invalid after claim; reconcile before retry.")
+            _update_claim(subsystem, pending_id, "approve", "invalid_after_claim")
+            if not _receipt(subsystem, pending_id, "approve", "invalid_after_claim"):
+                audit_failed = True
+            continue
+        try:
+            ok, msg, result = _apply_one(subsystem, rec, memory_store)
+        except Exception:
+            ok, msg, result = False, "unexpected application error", {}
+        except BaseException:
+            _update_claim(subsystem, rec["id"], "approve", "interrupted_unknown")
+            _receipt(subsystem, rec["id"], "approve", "interrupted_unknown")
+            raise
         if ok:
-            wa.discard_pending(subsystem, rec["id"])
-            applied += 1
+            if wa.discard_pending(subsystem, rec["id"]):
+                applied += 1
+                outcome = "approved"
+            else:
+                outcome = "cleanup_failed"
+                failed.append(f"{rec['id']}: already applied, but pending cleanup failed; do not approve again.")
             overwritten.extend(f"  {rec['id']}: {text}" for text in _changed_entries(result, "replaced"))
             patched.extend(f"  {rec['id']}: {text}" for text in _changed_entries(result, "patched"))
             removed.extend(f"  {rec['id']}: {text}" for text in _changed_entries(result, "removed"))
         else:
-            failed.append(f"{rec['id']}: {msg}")
+            outcome = "apply_failed_or_partial"
+            failed.append(f"{rec['id']}: {msg} — outcome may be partial; reconcile before retry.")
+        if not _update_claim(subsystem, rec["id"], "approve", outcome):
+            audit_failed = True
+        if not _receipt(subsystem, rec["id"], "approve", outcome):
+            audit_failed = True
 
     out = [f"Approved {applied} {subsystem} write(s)."]
     if overwritten:
@@ -104,6 +227,8 @@ def _approve(subsystem: str, rest: list[str], memory_store) -> str:
     if failed:
         out.append("Failed:")
         out.extend(f"  {f}" for f in failed)
+    if audit_failed:
+        out.append("Warning: one or more approval audit receipts could not be written.")
     return "\n".join(out)
 
 
@@ -146,12 +271,50 @@ def _reject(subsystem: str, rest: list[str]) -> str:
     if not rest:
         return _usage(subsystem)
     target = rest[0]
-    if target.lower() == "all":
-        n = sum(1 for rec in wa.list_pending(subsystem) if wa.discard_pending(subsystem, rec["id"]))
-        return f"Rejected {n} pending {subsystem} write(s)."
-    if wa.discard_pending(subsystem, target):
-        return f"Rejected pending {subsystem} write '{target}'."
-    return f"No pending {subsystem} write with id '{target}'."
+    if target.lower() != "all" and not re.fullmatch(wa.PENDING_ID_RE, target):
+        return "Invalid pending write ID."
+    pending_files = wa._pending_files(subsystem)
+    ids = [p.stem for p in pending_files] if target.lower() == "all" else [target]
+    if target.lower() != "all" and not wa._pending_path(subsystem, target).exists():
+        return f"No pending {subsystem} write with id '{target}'."
+    rejected, failed, audit_failed, legacy_discarded = 0, [], False, 0
+    for pending_id in ids:
+        if not re.fullmatch(wa.PENDING_ID_RE, pending_id):
+            legacy_path = next((p for p in pending_files if p.stem == pending_id), None)
+            try:
+                if legacy_path is None or not (legacy_path.is_file() or legacy_path.is_symlink()):
+                    failed.append(pending_id)
+                else:
+                    legacy_path.unlink()
+                    legacy_discarded += 1
+            except OSError:
+                failed.append(pending_id)
+            continue
+        error = _claim(subsystem, pending_id, "reject")
+        if error:
+            failed.append(error)
+            continue
+        if wa.discard_pending(subsystem, pending_id):
+            rejected += 1
+            outcome = "rejected"
+        else:
+            outcome = "cleanup_failed"
+            failed.append(pending_id)
+        if not _update_claim(subsystem, pending_id, "reject", outcome):
+            audit_failed = True
+        if not _receipt(subsystem, pending_id, "reject", outcome):
+            audit_failed = True
+    if target.lower() != "all" and rejected:
+        out = [f"Rejected pending {subsystem} write '{target}'."]
+    else:
+        out = [f"Rejected {rejected} pending {subsystem} write(s)."]
+    if legacy_discarded:
+        out.append(f"Discarded {legacy_discarded} unreadable legacy pending file(s).")
+    if failed:
+        out.append(f"Cleanup failed for: {', '.join(failed)}; rejection not completed.")
+    if audit_failed:
+        out.append("Warning: one or more approval audit receipts could not be written.")
+    return "\n".join(out)
 
 
 def _diff(rest: list[str]) -> str:

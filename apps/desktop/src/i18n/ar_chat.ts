@@ -114,7 +114,7 @@ export const arChat = {
       'composer.mention': 'الإشارة إلى الملفات والمجلدات والروابط وgit',
       'composer.slash': 'لوحة أوامر الشرطة المائلة',
       'composer.help': 'هذه المساعدة السريعة (احذف للإخفاء)',
-      'composer.sendNewline': 'إرسال · Shift+Enter لسطر جديد',
+      'composer.sendNewline': 'سطر جديد · مفتاح التعديل+Enter للإرسال',
       'composer.sendQueued': 'إرسال الدور التالي في قائمة الانتظار',
       'keybinds.openPanel': 'كل اختصارات لوحة المفاتيح',
       'composer.cancel': 'إغلاق النافذة المنبثقة · إلغاء التشغيل',

@@ -231,19 +231,32 @@ def _systemd_timeout_stop_us(unit_name: str) -> Optional[int]:
     for flag in (["--user"], []):
         try:
             result = subprocess.run(
-                ["systemctl", *flag, "show", unit_name, "--property=TimeoutStopUSec"],
+                ["systemctl", *flag, "show", unit_name, "--property=TimeoutStopUSec",
+                 "--property=LoadState"],
                 capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=2.0,
                 check=False,
             )
         except (subprocess.TimeoutExpired, OSError):
             continue
-        # Output: "TimeoutStopUSec=1min 30s" or "TimeoutStopUSec=90000000"
-        for line in result.stdout.splitlines() if result.returncode == 0 else ():
-            if line.startswith("TimeoutStopUSec="):
-                value = line.split("=", 1)[1].strip()
-                timeout_us = int(value) if value.isdigit() else parse_systemd_duration_to_us(value)
-                if timeout_us is not None:
-                    return timeout_us
+        if result.returncode != 0:
+            continue
+        # A scope that does not know this unit still answers with systemd's DEFAULTS
+        # (TimeoutStopSec=10s). Accepting those makes a sandboxed gateway — where
+        # `systemctl --user` cannot reach the user bus, so the system scope answers
+        # instead — look like a stale unit. Only a loaded unit's value is real; when
+        # the property is absent entirely, keep the old behaviour.
+        props: dict[str, str] = {}
+        for line in result.stdout.splitlines():
+            key, _, value = line.partition("=")
+            if key.strip():
+                props[key.strip()] = value.strip()
+        if props.get("LoadState", "loaded") != "loaded":
+            continue
+        value = props.get("TimeoutStopUSec", "")
+        if value:
+            timeout_us = int(value) if value.isdigit() else parse_systemd_duration_to_us(value)
+            if timeout_us is not None:
+                return timeout_us
     return None
 
 

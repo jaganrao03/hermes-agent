@@ -45,6 +45,12 @@ export function onBrowserFocusSession(callback: FocusSessionListener): () => voi
   return () => focusSessionListeners.delete(callback)
 }
 
+/** A service worker's `notificationclick` reaches the page as a message; route it
+ *  exactly like a click on an in-page notification. */
+export function dispatchBrowserFocusSession(sessionId: string): void {
+  focusSessionListeners.forEach(listener => listener(sessionId))
+}
+
 export interface BrowserNotifyPayload {
   body?: string
   focusSessionId?: string
@@ -65,22 +71,37 @@ export function showBrowserNotification(payload: BrowserNotifyPayload): boolean 
   }
 
   const focusSessionId = payload.focusSessionId || payload.sessionId
+  // One OS entry per session+kind: a replayed event replaces, never stacks.
+  const tag = `hermes:${payload.kind ?? ''}:${focusSessionId ?? payload.tag ?? ''}`
 
-  const notification = new Notification(title, {
-    body: payload.body,
-    // One OS entry per session+kind: a replayed event replaces, never stacks.
-    tag: `hermes:${payload.kind ?? ''}:${focusSessionId ?? payload.tag ?? ''}`
-  })
+  try {
+    const notification = new Notification(title, { body: payload.body, tag })
 
-  notification.onclick = () => {
-    // A click on our own notification is the user's request to come back.
-    window.focus()
-    notification.close()
+    notification.onclick = () => {
+      // A click on our own notification is the user's request to come back.
+      window.focus()
+      notification.close()
 
-    if (focusSessionId) {
-      focusSessionListeners.forEach(listener => listener(focusSessionId))
+      if (focusSessionId) {
+        focusSessionListeners.forEach(listener => listener(focusSessionId))
+      }
     }
-  }
 
-  return true
+    return true
+  } catch {
+    // Android's Chromium has no page-level Notification constructor: a service
+    // worker's showNotification is the only way an alert appears there.
+    void navigator.serviceWorker?.ready
+      .then(reg =>
+        reg.showNotification(title, {
+          body: payload.body,
+          data: { sessionId: focusSessionId ?? '' },
+          icon: '/hermes-pwa-192.png',
+          tag
+        })
+      )
+      .catch(() => undefined)
+
+    return false
+  }
 }

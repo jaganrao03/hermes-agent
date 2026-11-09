@@ -14,6 +14,7 @@ from __future__ import annotations
 import difflib
 import json
 import logging
+import math
 import os
 import re
 import time
@@ -32,6 +33,8 @@ logger = logging.getLogger(__name__)
 MEMORY = "memory"
 SKILLS = "skills"
 _SUBSYSTEMS = (MEMORY, SKILLS)
+PENDING_ID_RE = r"(?:[0-9a-f]{8}|[0-9a-f]{32})"
+
 
 # Per-subsystem config key. Intentionally a single boolean with no "block all writes"
 # state — to disable a subsystem use its own enable flag (e.g. ``memory.memory_enabled``).
@@ -71,12 +74,51 @@ def _pending_files(subsystem: str) -> list:
     return list(d.glob("*.json")) if d.exists() else []
 
 
+def _prune_completed_reservations(subsystem: str, reservations: Path) -> None:
+    """Drop completed reservations; pending records and attempt markers are the durable fences."""
+    home = get_hermes_home()
+    attempts = home / "pending" / "approval-attempts" / subsystem
+    for reservation in reservations.iterdir():
+        if not reservation.is_file() or reservation.is_symlink():
+            continue
+        pid = reservation.name
+        if not re.fullmatch(PENDING_ID_RE, pid):
+            continue
+        if _pending_path(subsystem, pid).exists() or (attempts / f"{pid}.json").exists():
+            reservation.unlink()
+
+
 def stage_write(subsystem: str, payload: dict[str, Any], *, summary: str, origin: str) -> dict[str, Any]:
-    """Persist a pending write and return its record (``id`` + metadata). ``payload`` is the exact
-    kwargs to replay the write on approval; ``origin`` is ``foreground`` or ``background_review``.
-    Best-effort: on disk failure it logs and still returns a record — the write is lost, which is
-    the safe failure for an approval gate (nothing silently committed)."""
-    pid = uuid.uuid4().hex[:8]
+    """Atomically publish a proposal under a unique ID fenced by its pending/attempt record."""
+    if subsystem not in _SUBSYSTEMS:
+        raise ValueError("invalid approval subsystem")
+    home = get_hermes_home()
+    pending_root = home / "pending"
+    pending_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(pending_root, 0o700)
+    reservation_root = pending_root / "approval-ids"
+    reservation_root.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(reservation_root, 0o700)
+    reservations = reservation_root / subsystem
+    reservations.mkdir(parents=True, mode=0o700, exist_ok=True)
+    os.chmod(reservations, 0o700)
+    _prune_completed_reservations(subsystem, reservations)
+    reservation_path = None
+    for _ in range(100):
+        pid = uuid.uuid4().hex
+        marker = home / "pending" / "approval-attempts" / subsystem / (pid + ".json")
+        if marker.exists() or marker.is_symlink() or _pending_path(subsystem, pid).exists():
+            continue
+        reservation_path = reservations / pid
+        try:
+            fd = os.open(reservation_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        except FileExistsError:
+            continue
+        os.close(fd)
+        break
+    else:
+        raise RuntimeError("could not allocate unique pending write ID")
+    assert reservation_path is not None
     record = {
         "id": pid, "subsystem": subsystem, "action": payload.get("action", ""),
         "summary": (summary or "").strip(), "origin": origin or "foreground",
@@ -84,9 +126,31 @@ def stage_write(subsystem: str, payload: dict[str, Any], *, summary: str, origin
     }
     try:
         atomic_json_write(_pending_path(subsystem, pid), record)
-    except Exception as e:  # pragma: no cover - disk failure path
-        logger.error("Failed to stage pending %s write: %s", subsystem, e, exc_info=True)
+    except Exception:
+        logger.error("Failed to stage pending %s write", subsystem)
+        with suppress(OSError):
+            reservation_path.unlink()
+        raise
+    with suppress(OSError):
+        reservation_path.unlink()
     return record
+
+
+def _valid_record(record: Any, subsystem: str, pending_id: str) -> bool:
+    if (subsystem not in _SUBSYSTEMS or not re.fullmatch(PENDING_ID_RE, pending_id)
+            or not isinstance(record, dict) or record.get("id") != pending_id
+            or record.get("subsystem") != subsystem or not isinstance(record.get("summary", ""), str)
+            or not isinstance(record.get("payload"), dict)):
+        return False
+    created = record.get("created_at", 0)
+    if isinstance(created, bool) or not isinstance(created, (int, float)) or not math.isfinite(created):
+        return False
+    payload = record["payload"]
+    if subsystem == MEMORY and payload.get("action") == "batch":
+        ops = payload.get("operations")
+        if not isinstance(ops, list) or not all(isinstance(op, dict) for op in ops):
+            return False
+    return True
 
 
 def list_pending(subsystem: str) -> list[dict[str, Any]]:
@@ -95,8 +159,8 @@ def list_pending(subsystem: str) -> list[dict[str, Any]]:
     for p in _pending_files(subsystem):
         try:
             record = json.loads(p.read_text(encoding="utf-8-sig"))
-            if not isinstance(record, dict):
-                raise ValueError(f"expected a JSON object, got {type(record).__name__}")
+            if not _valid_record(record, subsystem, p.stem):
+                raise ValueError("invalid pending record identity")
             records.append(record)
         except Exception:
             logger.warning("Skipping unreadable pending record: %s", p)
@@ -106,18 +170,22 @@ def list_pending(subsystem: str) -> list[dict[str, Any]]:
 
 def get_pending(subsystem: str, pending_id: str) -> Optional[dict[str, Any]]:
     """Return a single pending record by id, or None."""
+    if subsystem not in _SUBSYSTEMS or not isinstance(pending_id, str) or not re.fullmatch(PENDING_ID_RE, pending_id):
+        return None
     path = _pending_path(subsystem, pending_id)
     if not path.exists():
         return None
     try:
         data = json.loads(path.read_text(encoding="utf-8-sig"))
-        return data if isinstance(data, dict) else None
+        return data if _valid_record(data, subsystem, pending_id) else None
     except Exception:
         return None
 
 
 def discard_pending(subsystem: str, pending_id: str) -> bool:
     """Delete a pending record. Returns True if it existed."""
+    if subsystem not in _SUBSYSTEMS or not isinstance(pending_id, str) or not re.fullmatch(PENDING_ID_RE, pending_id):
+        return False
     try:
         path = _pending_path(subsystem, pending_id)
         if path.exists():
@@ -129,13 +197,10 @@ def discard_pending(subsystem: str, pending_id: str) -> bool:
 
 
 def pending_count(subsystem: str) -> int:
-    """Cheap count of pending records (for notification badges)."""
-    d = _pending_path(subsystem, "").parent
-    if not d.exists():
+    """Include unreadable proposals, which still need explicit review or rejection."""
+    if subsystem not in _SUBSYSTEMS:
         return 0
-    with suppress(Exception):
-        return sum(1 for _ in d.glob("*.json"))
-    return 0
+    return len(_pending_files(subsystem))
 
 
 # --- Write origin ---

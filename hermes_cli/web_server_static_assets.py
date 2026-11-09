@@ -16,7 +16,10 @@ from pathlib import Path
 STATIC_ASSET_PREFIXES: tuple[str, ...] = ("assets/", "ds-assets/", "fonts/", "fonts-terminal/")
 # Root page icons answer without sign-in, so a missing (or out-of-dist) icon must be a 404, not
 # the SPA shell served anonymously.
-STATIC_ASSET_FILES: frozenset[str] = frozenset({"apple-touch-icon.png", "favicon.ico"})
+STATIC_ASSET_FILES: frozenset[str] = frozenset({
+    "apple-touch-icon.png", "favicon.ico", "manifest.webmanifest",
+    "hermes-pwa-192.png", "hermes-pwa-512.png",
+})
 _PUBLIC_FONT_DIRS: tuple[str, ...] = ("fonts", "fonts-terminal")
 _WEB_PUBLIC = Path(__file__).resolve().parent.parent / "web" / "public"
 

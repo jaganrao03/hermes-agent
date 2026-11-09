@@ -23,6 +23,50 @@ export function normalizeWhatsAppId(value) {
   return String(value).replace(/:\d+(?=@)/, '').replace(/:\d+$/, '');
 }
 
+export function buildPollSnapshot({ pollId, chatId, question = '', ts = Date.now(), aggregation = [] } = {}) {
+  if (!pollId || !chatId) return null;
+  const counts = {};
+  const votersById = new Map();
+  for (const option of Array.isArray(aggregation) ? aggregation : []) {
+    const name = String(option?.name || '').trim();
+    if (!name) continue;
+    const voters = Array.isArray(option?.voters) ? option.voters : [];
+    counts[name] = voters.length;
+    for (const rawId of voters) {
+      const id = normalizeWhatsAppId(rawId);
+      if (!id) continue;
+      const voter = votersById.get(id) || { id, name: id, options: [] };
+      if (!voter.options.includes(name)) voter.options.push(name);
+      votersById.set(id, voter);
+    }
+  }
+  return {
+    pollId: String(pollId),
+    chatId: String(chatId),
+    ts,
+    question: String(question || ''),
+    counts,
+    voters: [...votersById.values()],
+  };
+}
+
+export function createPollSnapshotQueue(limit = 100) {
+  if (!Number.isInteger(limit) || limit < 1) {
+    throw new RangeError('poll snapshot queue limit must be a positive integer');
+  }
+  const queue = [];
+  return {
+    push(snapshot) {
+      if (!snapshot || typeof snapshot !== 'object') return;
+      queue.push(snapshot);
+      while (queue.length > limit) queue.shift();
+    },
+    drain() {
+      return queue.splice(0, queue.length);
+    },
+  };
+}
+
 function unwrapMessageEnvelopes(content) {
   let cur = content;
   // Envelopes nest (ephemeral wrapping viewOnce wrapping the payload); peel

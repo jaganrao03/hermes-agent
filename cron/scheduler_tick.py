@@ -80,6 +80,14 @@ def _pre_dispatch_housekeeping(_sched, headless: bool) -> None:
         reconcile_pending(allow_connect=False)
     else:
         reconcile_pending()
+    # Bot Chat receipts settle asynchronously and are not rows in cron.delivery_queue.
+    # Recheck queued job outcomes before dispatch so completed receipts cannot stay queued forever.
+    try:
+        from cron.delivery_outcome import reconcile_pending_deliveries
+        reconcile_pending_deliveries()
+    except Exception as _delivery_exc:
+        _sched.logger.warning("Cron delivery outcome reconciliation failed: %s",
+                              _delivery_exc, exc_info=True)
     # Upgrade drain for the retired CLI lane's records: never let it stop due jobs below.
     try:
         from cron.bot_chat_legacy import drain_legacy_pending

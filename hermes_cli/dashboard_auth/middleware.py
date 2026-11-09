@@ -47,10 +47,12 @@ _GATE_PUBLIC_PREFIXES: tuple[str, ...] = (
     "/api/auth/providers", "/api/mcp/oauth/callback/",
     "/assets/", "/dashboard-plugins/", "/favicon.ico", "/ds-assets/", "/fonts/", "/fonts-terminal/")
 
-# Page icons, matched exactly. Browsers fetch them without cookies (the Webapp's page icon and
-# home-screen icon are ``/apple-touch-icon.png``), so behind the gate they hit the sign-in redirect
-# and log an auto-SSO ``login_start`` with no sign-in behind it.
-_GATE_PUBLIC_ICONS: frozenset[str] = frozenset({"/apple-touch-icon.png"})
+# Installation assets are fetched by the browser without cookies; keeping these exact paths public
+# lets it read the Webapp manifest and icons without opening app data. Missing files still fail closed.
+_GATE_PUBLIC_ICONS: frozenset[str] = frozenset({
+    "/apple-touch-icon.png", "/manifest.webmanifest",
+    "/hermes-pwa-192.png", "/hermes-pwa-512.png",
+})
 
 
 def _path_is_public(path: str) -> bool:

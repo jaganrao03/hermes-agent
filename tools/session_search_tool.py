@@ -439,6 +439,30 @@ def _resolve_profile_db(profile: str):
     from hermes_state import SessionDB
     canon = profiles_mod.normalize_profile_name(profile)
     profiles_mod.validate_profile_name(canon)
+    # Profile names in tool arguments (including @session links) are untrusted.
+    # Enforce the caller's policy before opening a foreign store, not just in the
+    # tool schema: inline recall and injected DB handles use this same entrypoint.
+    from hermes_constants import get_hermes_home, get_hermes_home_override
+    from hermes_cli.config import load_config
+    from agent.secret_scope import is_multiplex_active
+
+    # Fail closed when the profile scope was lost. In a multiplexed gateway every turn runs
+    # under a home override (gateway/run.py _profile_runtime_scope), so an active multiplex
+    # with no override means this call reached a thread that dropped the contextvar: the
+    # config read below would resolve the LAUNCH profile's policy and could grant access on
+    # another profile's behalf. Attribution is impossible here, so refuse instead of guessing.
+    if is_multiplex_active() and get_hermes_home_override() is None:
+        raise PermissionError(
+            "cross-profile session search refused: no profile scope in this execution context")
+
+    policy = load_config().get("session_search", {})
+    if not isinstance(policy, dict):
+        raise PermissionError("invalid session_search policy; cross-profile access refused")
+    allow_cross_profile = policy.get("allow_cross_profile", False)
+    if allow_cross_profile is not True:
+        target_home = profiles_mod.get_profile_dir(canon).resolve()
+        if target_home != get_hermes_home().resolve():
+            raise PermissionError("cross-profile session search is disabled for this profile")
     if not profiles_mod.profile_exists(canon):
         raise ValueError(f"profile '{canon}' does not exist")
     return SessionDB(db_path=profiles_mod.get_profile_dir(canon) / "state.db", read_only=True)

@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { composerEnterIntent } from './enter-intent'
+
 afterEach(cleanup)
 
 // Faithful mirror of index.tsx's IME wiring: the composition guard at the top
@@ -33,7 +35,7 @@ function Harness({ onSubmit, wedgeComposing }: { onSubmit: (text: string) => voi
       return
     }
 
-    if (event.key === 'Enter' && !event.shiftKey) {
+    if (composerEnterIntent(event.nativeEvent) === 'submit') {
       event.preventDefault()
       submitDraft()
     }
@@ -74,14 +76,14 @@ function Harness({ onSubmit, wedgeComposing }: { onSubmit: (text: string) => voi
 }
 
 describe('composer Enter — stale IME composition flag recovery (#44135)', () => {
-  it('sends on Enter despite a wedged composing flag when the native event says not composing', async () => {
+  it('sends on modifier+Enter despite a wedged composing flag when the native event says not composing', async () => {
     const onSubmit = vi.fn()
     const { getByTestId } = render(<Harness onSubmit={onSubmit} wedgeComposing />)
     const editor = getByTestId('editor')
 
     await act(async () => {
       editor.textContent = 'hello after wedge'
-      fireEvent.keyDown(editor, { key: 'Enter', isComposing: false })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true, isComposing: false })
     })
 
     expect(onSubmit).toHaveBeenCalledWith('hello after wedge')
@@ -96,7 +98,7 @@ describe('composer Enter — stale IME composition flag recovery (#44135)', () =
       fireEvent.compositionStart(editor)
       editor.textContent = '你好'
       // The Enter that confirms the preedit: Chromium stamps isComposing=true.
-      fireEvent.keyDown(editor, { key: 'Enter', isComposing: true })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true, isComposing: true })
     })
 
     expect(onSubmit).not.toHaveBeenCalled()
@@ -104,7 +106,7 @@ describe('composer Enter — stale IME composition flag recovery (#44135)', () =
     // After compositionend, the next Enter sends normally.
     await act(async () => {
       fireEvent.compositionEnd(editor)
-      fireEvent.keyDown(editor, { key: 'Enter', isComposing: false })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true, isComposing: false })
     })
 
     expect(onSubmit).toHaveBeenCalledWith('你好')

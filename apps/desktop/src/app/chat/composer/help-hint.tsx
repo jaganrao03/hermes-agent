@@ -12,7 +12,7 @@ const COMPOSER_HOTKEY_ROWS = [
   { id: 'composer.mention', combos: ['@'] },
   { id: 'composer.slash', combos: ['/'] },
   { id: 'composer.help', combos: ['?'] },
-  { id: 'composer.sendNewline', combos: ['enter', 'shift+enter'] },
+  { id: 'composer.sendNewline', combos: ['enter', 'mod+enter'] },
   { id: 'composer.sendQueued', combos: ['mod+shift+k'] },
   { id: 'keybinds.openPanel', combos: ['mod+/'] },
   { id: 'composer.cancel', combos: ['escape'] },

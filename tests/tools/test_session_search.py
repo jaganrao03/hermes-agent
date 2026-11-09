@@ -488,6 +488,10 @@ class TestSessionLink:
 class TestCrossProfileRead:
     def _patch_profiles(self, monkeypatch, home, exists=True):
         from hermes_cli import profiles as profiles_mod
+        # Foreign reads now require explicit caller-side authorization. These
+        # tests exercise routing after authorization, not the default policy.
+        monkeypatch.setattr("hermes_cli.config.load_config", lambda: {
+            "session_search": {"allow_cross_profile": True}})
         monkeypatch.setattr(profiles_mod, "normalize_profile_name", lambda n: n)
         monkeypatch.setattr(profiles_mod, "validate_profile_name", lambda n: None)
         monkeypatch.setattr(profiles_mod, "profile_exists", lambda n: exists)

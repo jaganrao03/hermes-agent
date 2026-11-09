@@ -3899,7 +3899,7 @@ export const deOverrides = {
       'composer.mention': 'Dateien, Ordner, URLs, git referenzieren',
       'composer.slash': 'Slash-Befehlspalette',
       'composer.help': 'diese Schnellhilfe (Löschen zum Schließen)',
-      'composer.sendNewline': 'senden · Shift+Enter für neue Zeile',
+      'composer.sendNewline': 'neue Zeile · Mod+Enter zum Senden',
       'composer.sendQueued': 'nächsten eingereihten Turn senden',
       'keybinds.openPanel': 'alle Tastaturkürzel',
       'composer.cancel': 'Popover schließen · Lauf abbrechen',

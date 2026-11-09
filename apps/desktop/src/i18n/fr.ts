@@ -3908,7 +3908,7 @@ export const frOverrides = {
       'composer.mention': 'référencer des fichiers, dossiers, URLs, git',
       'composer.slash': 'palette de commandes slash',
       'composer.help': 'aide rapide (effacer pour fermer)',
-      'composer.sendNewline': 'envoyer · Shift+Entrée pour un retour à la ligne',
+      'composer.sendNewline': 'nouvelle ligne · modificateur+Entrée pour envoyer',
       'composer.sendQueued': "envoyer le prochain tour en file d'attente",
       'keybinds.openPanel': 'tous les raccourcis clavier',
       'composer.cancel': "fermer le popover · annuler l'exécution",

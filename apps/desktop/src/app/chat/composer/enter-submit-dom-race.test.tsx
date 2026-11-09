@@ -2,6 +2,8 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useRef, useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { composerEnterIntent } from './enter-intent'
+
 // No global setupFiles registers auto-cleanup, so unmount between tests —
 // otherwise a second render() leaks the first editor and getByTestId('editor')
 // matches multiple nodes.
@@ -98,8 +100,17 @@ function Harness({
       return
     }
 
-    if (event.key === 'Enter' && !event.shiftKey) {
+    const enterIntent = composerEnterIntent(event.nativeEvent)
+
+    if (enterIntent === 'newline') {
+      event.stopPropagation()
+
+      return
+    }
+
+    if (enterIntent === 'submit') {
       event.preventDefault()
+      event.stopPropagation()
 
       const editorText = editorRef.current ? composerPlainText(editorRef.current) : draftRef.current
       const hasLivePayload = editorText.trim().length > 0 || attachments.length > 0
@@ -144,8 +155,71 @@ function Harness({
   )
 }
 
-describe('composer Enter submit — live DOM vs stale composer state (#39630)', () => {
-  it('sends the just-typed text on Enter even when composer state has not synced', async () => {
+describe('composer keyboard submit — live DOM vs stale composer state (#39630)', () => {
+  it('keeps plain Enter as a newline instead of submitting', async () => {
+    const onSubmit = vi.fn()
+
+    const { getByTestId } = render(
+      <Harness onCancel={vi.fn()} onDrain={vi.fn()} onQueue={vi.fn()} onSubmit={onSubmit} />
+    )
+
+    const editor = getByTestId('editor')
+    let event: KeyboardEvent | undefined
+
+    await act(async () => {
+      editor.textContent = 'first line'
+      editor.addEventListener('keydown', e => { event = e }, { once: true, capture: true })
+      fireEvent.keyDown(editor, { key: 'Enter' })
+    })
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(event?.defaultPrevented).toBe(false)
+  })
+
+  it('does not let plain Enter bubble into an ancestor submit handler', () => {
+    const onSubmit = vi.fn()
+
+    const submitFromAncestor = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Enter') {
+        onSubmit('ancestor')
+      }
+    }
+
+    const { getByTestId } = render(
+      <div onKeyDown={submitFromAncestor}>
+        <Harness onCancel={vi.fn()} onDrain={vi.fn()} onQueue={vi.fn()} onSubmit={onSubmit} />
+      </div>
+    )
+
+    fireEvent.keyDown(getByTestId('editor'), { key: 'Enter' })
+
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it('submits modifier+Enter only once instead of also bubbling', () => {
+    const onSubmit = vi.fn()
+
+    const submitFromAncestor = (event: React.KeyboardEvent<HTMLDivElement>) => {
+      if (event.key === 'Enter') {
+        onSubmit('ancestor')
+      }
+    }
+
+    const { getByTestId } = render(
+      <div onKeyDown={submitFromAncestor}>
+        <Harness onCancel={vi.fn()} onDrain={vi.fn()} onQueue={vi.fn()} onSubmit={onSubmit} />
+      </div>
+    )
+
+    const editor = getByTestId('editor')
+    editor.textContent = 'send this'
+    fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit).toHaveBeenCalledWith('send this')
+  })
+
+  it('sends the just-typed text on modifier+Enter even when composer state has not synced', async () => {
     const onSubmit = vi.fn()
 
     const { getByTestId } = render(
@@ -158,7 +232,7 @@ describe('composer Enter submit — live DOM vs stale composer state (#39630)', 
     // state is still empty (the exact stale-state race).
     await act(async () => {
       editor.textContent = 'hello world'
-      fireEvent.keyDown(editor, { key: 'Enter' })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
     })
 
     expect(onSubmit).toHaveBeenCalledWith('hello world')
@@ -177,7 +251,7 @@ describe('composer Enter submit — live DOM vs stale composer state (#39630)', 
 
     await act(async () => {
       editor.textContent = 'urgent follow-up'
-      fireEvent.keyDown(editor, { key: 'Enter' })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
     })
 
     expect(onQueue).toHaveBeenCalledWith('urgent follow-up')
@@ -199,7 +273,7 @@ describe('composer Enter submit — live DOM vs stale composer state (#39630)', 
 
     await act(async () => {
       editor.textContent = ''
-      fireEvent.keyDown(editor, { key: 'Enter' })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
     })
 
     expect(onCancel).not.toHaveBeenCalled()
@@ -228,7 +302,7 @@ describe('composer Enter submit — live DOM vs stale composer state (#39630)', 
 
     await act(async () => {
       editor.textContent = ''
-      fireEvent.keyDown(editor, { key: 'Enter' })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
     })
 
     // Head of the queue, and NOT a bare cancel — send-now promotes + interrupts.
@@ -248,7 +322,7 @@ describe('composer Enter submit — live DOM vs stale composer state (#39630)', 
 
     await act(async () => {
       editor.textContent = ''
-      fireEvent.keyDown(editor, { key: 'Enter' })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
     })
 
     expect(onDrain).toHaveBeenCalledTimes(1)
@@ -275,7 +349,7 @@ describe('composer Enter submit — live DOM vs stale composer state (#39630)', 
     await act(async () => {
       editor.textContent = 'draft while reconnecting'
       fireEvent.input(editor)
-      fireEvent.keyDown(editor, { key: 'Enter' })
+      fireEvent.keyDown(editor, { key: 'Enter', ctrlKey: true })
     })
 
     expect(editor.textContent).toBe('draft while reconnecting')

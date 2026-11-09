@@ -18,6 +18,8 @@ def test_session_search_honours_requested_profile_db(tmp_path, monkeypatch):
     hermes_home = tmp_path / ".hermes"
     profile_home = hermes_home / "profiles" / "llm-wiki"
     profile_home.mkdir(parents=True)
+    # Routing tests authorize foreign reads explicitly; omission now denies.
+    (hermes_home / "config.yaml").write_text("session_search: {allow_cross_profile: true}\n")
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     monkeypatch.setenv("HERMES_HOME", str(hermes_home))
 

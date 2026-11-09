@@ -3351,7 +3351,7 @@ export const zhOverrides = {
       'composer.mention': '引用文件、文件夹、URL、git',
       'composer.slash': '斜杠命令面板',
       'composer.help': '此快速帮助 (删除以关闭)',
-      'composer.sendNewline': '发送 · Shift+Enter 换行',
+      'composer.sendNewline': '换行 · 修饰键+Enter发送',
       'composer.sendQueued': '发送下一条排队的回合',
       'keybinds.openPanel': '所有键盘快捷键',
       'composer.cancel': '关闭弹窗 · 取消运行',

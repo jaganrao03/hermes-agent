@@ -63,6 +63,48 @@ def _contained_host_path(rel: str, hermes_home: Path, abs_msg: str, traversal_ms
     return host_path.resolve()
 
 
+# Hermes' own control and state stores are never mountable into a sandbox: they are not
+# service tokens, they hold the profile's configuration (backend, approvals, paths),
+# conversation history, backups of the same, and the skill/prompt store. A skill that could
+# mount them could steer the sandbox's own creation, read every past session, or rewrite
+# instructions. Refusal is by name and by pattern rather than an allowlist so that ordinary
+# service tokens (``google_token.json`` and friends) keep working.
+_CONTROL_FILE_NAMES = frozenset({
+    "auth.json", "auth.lock", "webhook_subscriptions.json", "gateway_state.json",
+    "channel_directory.json", "context_length_cache.yaml", "context_length_cache.yaml.lock",
+    "install_id", ".install_id.lock",
+})
+_CONTROL_SUFFIXES = (".db", ".db-wal", ".db-shm", ".db-journal", ".sqlite", ".sqlite3",
+                     ".lock", ".pem", ".key", ".p12", ".pfx")
+_CONTROL_PREFIXES = ("config.yaml", "config.yml", ".env", ".clean_shutdown",
+                     ".hermes-update-in-progress", ".codex_")
+_CONTROL_INFIXES = (".bak", ".backup", ".orig", ".save")
+_CONTROL_DIR_NAMES = frozenset({
+    "sessions", "mcp-tokens", "pairing", "vault", "browser-profile", "cron", "hooks",
+    "memories", "skills", "checkpoints", "logs", "backups", "kanban", "installs",
+    "profiles", "deleted", ".curator_backups", "webapp", "state", "scripts", "plugins",
+})
+
+
+def _is_control_store(resolved: Path, hermes_home: Path) -> bool:
+    """True when *resolved* is (or lives under) a Hermes control/state store."""
+    try:
+        relative = resolved.relative_to(hermes_home.resolve())
+    except ValueError:
+        return False
+    parts = relative.parts
+    if not parts:
+        return False
+    if any(part in _CONTROL_DIR_NAMES for part in parts[:-1]) or parts[0] in _CONTROL_DIR_NAMES:
+        return True
+    name = parts[-1]
+    if name in _CONTROL_FILE_NAMES or name.endswith(_CONTROL_SUFFIXES):
+        return True
+    if name.startswith(_CONTROL_PREFIXES) or any(marker in name for marker in _CONTROL_INFIXES):
+        return True
+    return False
+
+
 def register_credential_file(relative_path: str, container_base: str = "/root/.hermes") -> bool:
     """Register a HERMES_HOME-relative credential file for mounting; True if it exists and was registered.
 
@@ -98,6 +140,11 @@ def register_credential_file(relative_path: str, container_base: str = "/root/.h
         logger.warning("credential_files: refused %r — it is a credential store the agent "
                        "is denied from reading; a skill may mount its own service token, "
                        "not the master key files", relative_path)
+        return False
+    if _is_control_store(resolved, get_hermes_home()):
+        logger.warning("credential_files: refused %r — Hermes control/state stores "
+                       "(config, session history, auth, vault) are not mountable into a sandbox",
+                       relative_path)
         return False
 
     container_path = f"{container_base.rstrip('/')}/{relative_path}"

@@ -3888,7 +3888,7 @@ export const esOverrides = {
       'composer.mention': 'referenciar archivos, carpetas, URL y Git',
       'composer.slash': 'paleta de comandos con /',
       'composer.help': 'esta ayuda rápida (eliminar para descartarla)',
-      'composer.sendNewline': 'enviar · Shift+Enter para insertar una línea nueva',
+      'composer.sendNewline': 'nueva línea · modificador+Enter para enviar',
       'composer.sendQueued': 'enviar el siguiente turno en cola',
       'keybinds.openPanel': 'todos los atajos de teclado',
       'composer.cancel': 'cerrar el menú emergente · cancelar la ejecución',
