@@ -1227,8 +1227,17 @@ class SessionAuthority:
                     if exc.reason == 'unknown_execution':
                         # An automation turn nobody is waiting on settles interrupted (GW-10); only a
                         # person's lost turn keeps the FIFO paused for them to resolve.
-                        from gateway.session_unattended_unknown import settle_unattended_unknown
+                        from gateway.session_unattended_unknown import (
+                            settle_dead_owner_unknown_for_session, settle_unattended_unknown)
                         if await settle_unattended_unknown(self, ref):
+                            continue
+                        # A person's turn fenced by a DEAD owner epoch can never run again, and the
+                        # sweep that would settle it waits for the session to go stale — which an
+                        # active conversation never does. Pausing there stranded the FIFO and every
+                        # prompt queued behind it ("Turn lost during restart", nothing runs) until
+                        # the person found Discard. Settle the dead row and serve the queue instead.
+                        if await asyncio.to_thread(settle_dead_owner_unknown_for_session,
+                                                   self.db, self.epoch, ref.session_id):
                             continue
                     if exc.reason == 'admission_conflict':
                         # A verdict on the head alone (its route or binding moved under it) that every drain
@@ -1456,6 +1465,11 @@ async def initialize_session_authority(runner, *, profile_id, instance_id, db=No
     # A lost automation turn has nobody to resolve it: it settles interrupted before any FIFO runs.
     from gateway.session_unattended_unknown import settle_recovered_unattended
     await asyncio.to_thread(settle_recovered_unattended, db, epoch)
+    # A PERSON's turn lost with a dead owner settles too, once it is stale: nobody is here at boot
+    # to resolve it, and leaving it `unknown` paused that session's FIFO until an operator discarded
+    # it (every restore/continue answered `unknown_execution`).
+    from gateway.session_unattended_unknown import settle_recovered_dead_owner_stale
+    await asyncio.to_thread(settle_recovered_dead_owner_stale, db, epoch)
     await asyncio.to_thread(backfill_legacy_session_owners, db)
     await asyncio.to_thread(backfill_compression_created_sources, db)
     from gateway.session_local_recovery import release_handed_off_receipts

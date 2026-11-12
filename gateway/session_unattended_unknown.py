@@ -14,6 +14,8 @@ Hermes transcript notice committed in the same transaction. No second recovery s
 from __future__ import annotations
 
 import logging
+import os
+import time
 
 from hermes_state_keys import CRON_PRINCIPAL_ID
 
@@ -61,6 +63,109 @@ def settle_recovered_unattended(db, epoch) -> int:
         settled += 1
         logger.info('Lost automation admission %s on session %s settled interrupted (not replayed)',
                     row['admission_id'], row['target_session_id'])
+    return settled
+
+
+STALE_UNKNOWN_DEFAULT_SECONDS = 600.0
+
+
+def _stale_after_seconds() -> float:
+    """How long a person's lost turn may sit unresolved before a restart settles it."""
+    raw = os.environ.get('HERMES_SETTLE_STALE_UNKNOWN_SECONDS', '')
+    try:
+        value = float(raw)
+    except (TypeError, ValueError):
+        return STALE_UNKNOWN_DEFAULT_SECONDS
+    return value if value > 0 else STALE_UNKNOWN_DEFAULT_SECONDS
+
+
+def _session_last_activity(db, session_id):
+    with db._read_ctx() as conn:
+        row = conn.execute('SELECT last_activity_at FROM sessions WHERE id=?',
+                           (session_id,)).fetchone()
+    return row[0] if row and row[0] is not None else None
+
+
+def settle_recovered_dead_owner_stale(db, epoch, *, now=None, stale_after_s=None) -> int:
+    """Boot recovery, after :func:`settle_recovered_unattended`: settle a PERSON's lost turn that
+    nobody resolved before this restart, once it is stale, instead of pausing its session forever.
+
+    ``recover_session_inputs`` fences every turn a previous owner left ``started`` as ``unknown``
+    and leaves the old ``owner_epoch`` on the row; no worker can ever attach to it again. An
+    interactive row then pauses the session's FIFO until a person resolves it — and at boot there
+    is nobody to ask, so a gateway restarted mid-turn wedged its sessions until an operator ran
+    ``hermes sessions discard`` (every later restore/continue answered ``unknown_execution``).
+    The person is told in the transcript and can resend; nothing is replayed.
+
+    Two guards keep the interactive promise where it still holds. A row fenced by THIS owner
+    (``owner_epoch == epoch``) is left alone: someone is present to decide. A row whose session
+    was active within ``stale_after_s`` (default 10 min, ``HERMES_SETTLE_STALE_UNKNOWN_SECONDS``)
+    is left alone too — the person may still be mid-conversation; the pause notice and ``/discard``
+    resolve it as before. A session with no recorded activity is never judged stale.
+    """
+    from agent.turn_failure_copy import LOST_TURN_NOTICE
+    from gateway.session_ingress_media import release_admission_media
+    from gateway.session_results import close_discarded_turn
+    from hermes_state_runtime import RuntimeStoreError, _row, resolve_unknown_session_input
+    cutoff = (time.time() if now is None else now) - (
+        _stale_after_seconds() if stale_after_s is None else stale_after_s)
+    with db._read_ctx() as conn:
+        rows = [_row(r) for r in conn.execute(
+            "SELECT * FROM session_admissions WHERE status='unknown' ORDER BY seq").fetchall()]
+    settled = 0
+    for row in rows:
+        if not row or is_unattended(row) or row['owner_epoch'] == epoch:
+            continue
+        last = _session_last_activity(db, row['target_session_id'])
+        if last is None or last > cutoff:
+            continue
+        try:
+            resolve_unknown_session_input(
+                db, epoch=epoch, admission_id=row['admission_id'], generation=row['generation'],
+                _terminal_write=lambda conn, lost: close_discarded_turn(db, conn, lost, LOST_TURN_NOTICE))
+        except RuntimeStoreError as exc:
+            logger.warning('Stale lost turn %s left unknown: %s', row['admission_id'], exc.reason)
+            continue
+        release_admission_media(db, row['admission_id'])
+        settled += 1
+        logger.info('Stale lost turn %s on session %s settled interrupted (not replayed)',
+                    row['admission_id'], row['target_session_id'])
+    return settled
+
+
+def settle_dead_owner_unknown_for_session(db, epoch, session_id, *, now=None) -> int:
+    """Settle a lost turn fenced by a DEAD owner in ONE session — no staleness wait.
+
+    ``settle_recovered_dead_owner_stale`` holds back ``stale_after_s`` because a background sweep
+    must not close a turn while its person may still be mid-conversation. A NEW prompt arriving in
+    that session is the opposite signal: the person is here and wants to move on, and a row left by
+    a previous owner epoch can never run again, so leaving it only refuses the prompt with
+    ``unknown_execution`` (the desktop's "Turn lost during restart", with its queue stuck behind
+    it). Nothing is replayed; the transcript gets the same lost-turn notice.
+    """
+    from agent.turn_failure_copy import LOST_TURN_NOTICE
+    from gateway.session_ingress_media import release_admission_media
+    from gateway.session_results import close_discarded_turn
+    from hermes_state_runtime import RuntimeStoreError, _row, resolve_unknown_session_input
+    with db._read_ctx() as conn:
+        rows = [_row(r) for r in conn.execute(
+            "SELECT * FROM session_admissions WHERE target_session_id=? AND status='unknown' ORDER BY seq",
+            (session_id,)).fetchall()]
+    settled = 0
+    for row in rows:
+        if not row or is_unattended(row) or row['owner_epoch'] == epoch:
+            continue
+        try:
+            resolve_unknown_session_input(
+                db, epoch=epoch, admission_id=row['admission_id'], generation=row['generation'],
+                _terminal_write=lambda conn, lost: close_discarded_turn(db, conn, lost, LOST_TURN_NOTICE))
+        except RuntimeStoreError as exc:
+            logger.warning('Lost turn %s left unknown: %s', row['admission_id'], exc.reason)
+            continue
+        release_admission_media(db, row['admission_id'])
+        settled += 1
+        logger.info('Lost turn %s on session %s settled: the person sent a new prompt',
+                    row['admission_id'], session_id)
     return settled
 
 
