@@ -4,19 +4,49 @@ import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { $narrowOverlayPaneIds } from '@/components/pane-shell/narrow-overlay-state'
 import { $narrowViewport } from '@/components/pane-shell/tree/store'
 
-/** How close to the left edge a drag must start to count as "pull the drawer". */
-const EDGE_PX = 28
-/** How far it must travel before it fires, so a wobble does not open a pane. */
+/** How far a drag must travel before it fires, so a wobble does not open a pane. */
 const OPEN_PX = 56
 const CLOSE_PX = 64
 /** Horizontal drags are only gestures when they clearly outrun the vertical. */
 const AXIS_RATIO = 1.4
 
-/** The pane a left-edge pull reveals: the session sidebar's real id. */
+/** The pane a rightward pull reveals: the session sidebar's real id. */
 const SIDEBAR_PANE_ID = 'sessions'
+
+/** Elements whose own horizontal drag belongs to them, not to the drawer. */
+const OWN_GESTURE = "input, textarea, select, pre, [contenteditable='true'], [data-slot='composer-root']"
 
 function isCoarsePointer(): boolean {
   return typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true
+}
+
+function scrollsSideways(element: Element): boolean {
+  if (element.scrollWidth <= element.clientWidth + 4) {
+    return false
+  }
+
+  const overflow = getComputedStyle(element).overflowX
+
+  return overflow === 'auto' || overflow === 'scroll'
+}
+
+/**
+ * True when the drag started somewhere that consumes horizontal movement itself:
+ * the composer, a field, a code block, a table that scrolls, or a chat canvas
+ * that pans. Opening the drawer out of those would fight the control.
+ */
+function ownsHorizontalDrag(target: EventTarget | null): boolean {
+  let node = target instanceof Element ? target : null
+
+  while (node && node !== document.body) {
+    if (node.matches(OWN_GESTURE) || scrollsSideways(node)) {
+      return true
+    }
+
+    node = node.parentElement
+  }
+
+  return false
 }
 
 function dispatchReveal(id: string, mode: 'close' | 'open'): void {
@@ -26,21 +56,25 @@ function dispatchReveal(id: string, mode: 'close' | 'open'): void {
 /**
  * Phone drawer gestures for the narrow layout.
  *
- * On a phone the session sidebar leaves the grid and becomes an edge overlay.
- * Reaching its tab in the strip is a stretch for a thumb, so this adds the two
- * gestures every phone app of this shape has: pull from the left edge to bring
- * the drawer out, flick it back to the left to dismiss it.
+ * On a phone the session sidebar leaves the grid and becomes an overlay. This
+ * adds the two gestures every app of this shape has: drag the conversation to
+ * the right to bring the drawer out, drag it back to the left to dismiss it.
  *
- * Deliberately narrow in scope:
- * - only on a coarse pointer and only while the layout is narrow, so a mouse
- *   and a wide window keep the tab strip as the single way in;
- * - a drag must be horizontal by `AXIS_RATIO` before it counts, so scrolling
- *   the transcript with a slightly diagonal thumb never opens the drawer;
+ * Deliberately blind about where the drag starts. Android's back gesture owns
+ * the left edge, so an edge-only trigger is the one zone the system steals —
+ * opening from the middle of the transcript is what actually works on a phone.
+ *
+ * Guards, because a swipe shares the surface with scrolling and selection:
+ * - only on a coarse pointer and only while the layout is narrow;
+ * - the drag must be horizontal by `AXIS_RATIO`, so a scrolling thumb never
+ *   opens the drawer, and a tap never counts (56px of travel);
+ * - a drag that starts in the composer, a field, a code block or anything that
+ *   scrolls sideways is that control's own gesture, not the drawer's;
  * - it dispatches the app's existing pane-reveal event rather than owning any
  *   state, which keeps Escape, the titlebar Hide, and ⌘B in charge of the same
  *   overlay.
  */
-export function useNarrowEdgeSwipe(): void {
+export function useDrawerSwipe(): void {
   useEffect(() => {
     if (!isCoarsePointer()) {
       return
@@ -62,9 +96,8 @@ export function useNarrowEdgeSwipe(): void {
       startX = touch.clientX
       startY = touch.clientY
       // The drawer's own content is a legitimate place to start a dismiss
-      // flick; a closed drawer can only be pulled from the edge itself.
-      const drawerOpen = $narrowOverlayPaneIds.get().size > 0
-      tracking = drawerOpen || startX <= EDGE_PX
+      // flick; the conversation opens it only from its own canvas.
+      tracking = $narrowOverlayPaneIds.get().size > 0 || !ownsHorizontalDrag(event.target)
     }
 
     const onTouchEnd = (event: TouchEvent) => {
@@ -87,9 +120,7 @@ export function useNarrowEdgeSwipe(): void {
         return
       }
 
-      const drawerOpen = $narrowOverlayPaneIds.get().size > 0
-
-      if (drawerOpen) {
+      if ($narrowOverlayPaneIds.get().size > 0) {
         if (dx <= -CLOSE_PX) {
           dispatchReveal(SIDEBAR_PANE_ID, 'close')
         }
@@ -97,7 +128,7 @@ export function useNarrowEdgeSwipe(): void {
         return
       }
 
-      if (dx >= OPEN_PX && startX <= EDGE_PX) {
+      if (dx >= OPEN_PX) {
         dispatchReveal(SIDEBAR_PANE_ID, 'open')
       }
     }

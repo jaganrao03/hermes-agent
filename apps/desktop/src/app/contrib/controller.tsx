@@ -39,7 +39,7 @@ import { discoverBundledPlugins } from '@/contrib/plugins'
 import { Slot } from '@/contrib/react/slot'
 import { registry } from '@/contrib/registry'
 import { discoverRuntimePlugins } from '@/contrib/runtime-loader'
-import { useNarrowEdgeSwipe } from '@/hooks/use-narrow-edge-swipe'
+import { useDrawerSwipe } from '@/hooks/use-drawer-swipe'
 import { LocalizedTabTitle, translateNow } from '@/i18n'
 import { NEW_SESSION_TITLE, sessionTitle as storedSessionTitle } from '@/lib/chat-runtime'
 import {
@@ -784,9 +784,9 @@ registerPaneCloser('files', () =>
 // ---------------------------------------------------------------------------
 
 export function ContribController() {
-  // Phone drawer gestures: pull from the left edge to open the session sidebar,
-  // flick it back to close. A no-op on a mouse or a wide window.
-  useNarrowEdgeSwipe()
+  // Phone drawer gestures: drag the conversation right to open the session
+  // sidebar, flick it back left to close. A no-op on a mouse or a wide window.
+  useDrawerSwipe()
 
   const sidebarOpen = useStore($sidebarOpen)
   const statusbarVisible = useStore($statusbarVisible)
