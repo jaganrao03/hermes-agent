@@ -869,6 +869,64 @@
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────────────
+   PHONE CHROME — the browser-hosted app on a real phone.
+
+   The touch pass above sizes controls for a finger. What is left is the
+   device's own furniture: a notch and a home indicator to inset around, a
+   status bar drawn outside the page (see lib/mobile-chrome.ts), and a tap that
+   must not flash Chrome's translucent blue box over the UI. Gated on the
+   browser host — and, for the insets, a coarse pointer — so native Desktop
+   keeps its window-managed edges.
+   ───────────────────────────────────────────────────────────────────────── */
+html[data-hermes-desktop-host='browser'] {
+  --phone-inset-top: env(safe-area-inset-top, 0px);
+  --phone-inset-bottom: env(safe-area-inset-bottom, 0px);
+  --phone-inset-left: env(safe-area-inset-left, 0px);
+  --phone-inset-right: env(safe-area-inset-right, 0px);
+  -webkit-tap-highlight-color: transparent;
+  /* A downward drag on the page is the browser's pull-to-refresh, which reloads
+     the app mid-conversation. Scrolling stays inside it. */
+  overscroll-behavior-y: none;
+}
+
+html[data-hermes-desktop-host='browser']
+  :is(a, button, input, label, select, textarea, [role='button'], [role='menuitem'], [role='tab']) {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (hover: none), (pointer: coarse) {
+  /* The composer sits on the home indicator in a fullscreen home-screen copy. */
+  html[data-hermes-desktop-host='browser'] [data-slot='composer-dock'] {
+    padding-bottom: max(var(--phone-inset-bottom), 0.25rem);
+  }
+
+  /* Landscape notch: keep the text column out from under the cutout. */
+  html[data-hermes-desktop-host='browser'] [data-slot='composer-bounds'] {
+    padding-left: var(--phone-inset-left);
+    padding-right: var(--phone-inset-right);
+  }
+
+  /* Flinging the transcript must not drag the shell or the drawer behind it. */
+  html[data-hermes-desktop-host='browser'] [data-slot='aui_thread-viewport'] {
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* A suggestion chip is the main verb on a phone and was a 26px target. The
+     Auto control shares the row and wants the same hit box. */
+  html[data-hermes-desktop-host='browser'] [data-slot='assistant-follow-up-suggestions'] > button {
+    min-height: 2.75rem;
+    align-items: center;
+    padding-inline: 0.875rem;
+    line-height: 1.2;
+  }
+
+  html[data-hermes-desktop-host='browser'] [data-slot='assistant-follow-up-suggestions'] {
+    overscroll-behavior-x: contain;
+  }
+}
+
 .dither {
   background: repeating-conic-gradient(currentColor 0% 25%, transparent 0% 50%) 0 0 / 0.125rem 0.125rem;
 }

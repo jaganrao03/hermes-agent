@@ -5,6 +5,7 @@ import type { CSSProperties, ReactElement, PointerEvent as ReactPointerEvent } f
 import { SessionDraftTitle } from '@/app/chat/session-draft-title'
 import { SessionStatusDot } from '@/app/chat/session-status-dot'
 import { PALETTE_AREA, type PaletteContribution, paletteToggle } from '@/app/command-palette/contrib'
+import { AppBadgeSync } from '@/app/shell/app-badge-sync'
 import { type StatusbarItem } from '@/app/shell/statusbar-controls'
 import { InlinePreviewDirective } from '@/components/assistant-ui/inline-preview-directive'
 import { IdleMount } from '@/components/idle-mount'
@@ -38,6 +39,7 @@ import { discoverBundledPlugins } from '@/contrib/plugins'
 import { Slot } from '@/contrib/react/slot'
 import { registry } from '@/contrib/registry'
 import { discoverRuntimePlugins } from '@/contrib/runtime-loader'
+import { useNarrowEdgeSwipe } from '@/hooks/use-narrow-edge-swipe'
 import { LocalizedTabTitle, translateNow } from '@/i18n'
 import { NEW_SESSION_TITLE, sessionTitle as storedSessionTitle } from '@/lib/chat-runtime'
 import {
@@ -782,6 +784,10 @@ registerPaneCloser('files', () =>
 // ---------------------------------------------------------------------------
 
 export function ContribController() {
+  // Phone drawer gestures: pull from the left edge to open the session sidebar,
+  // flick it back to close. A no-op on a mouse or a wide window.
+  useNarrowEdgeSwipe()
+
   const sidebarOpen = useStore($sidebarOpen)
   const statusbarVisible = useStore($statusbarVisible)
 
@@ -817,6 +823,8 @@ export function ContribController() {
     >
       <ContribWiring>
         <AppContextMenu />
+        {/* Installed-PWA icon badge: how many approvals are waiting. */}
+        <AppBadgeSync />
         {/* App-owned answer to a plugin's ctx.preview.executeJavaScript. Plugins
             run in every window kind, so each shell mounts it. */}
         <PluginPreviewConsentDialog />

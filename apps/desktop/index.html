@@ -2,15 +2,45 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content" />
+    <!-- `viewport-fit=cover` is what lets the app paint under a notch and then
+         inset itself with env(safe-area-inset-*): without it a fullscreen
+         home-screen copy is letterboxed above the home indicator and beside a
+         landscape notch. `interactive-widget` keeps the keyboard shrinking the
+         layout instead of covering the composer. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, viewport-fit=cover, interactive-widget=resizes-content"
+    />
     <meta name="color-scheme" content="light dark" />
+    <!-- Boot constant only: applyTheme() rewrites this to the painted chrome
+         colour on the first frame and on every theme change. -->
     <meta name="theme-color" content="#0a0a0a" />
+    <!-- Home-screen install: iOS reads these metas, not the manifest, for the
+         standalone flag and the dock label; Android's Chromium reads the
+         `mobile-web-app-capable` twin. Without them an "Add to Home Screen"
+         copy of the webapp opens with Safari/Chrome chrome around it. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Hermes" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <link rel="icon" type="image/png" sizes="180x180" href="/apple-touch-icon.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="1024x1024" href="/apple-touch-icon.png" />
+    <link rel="apple-touch-icon" sizes="1024x1024" href="/apple-touch-icon.png" />
     <link rel="shortcut icon" href="/apple-touch-icon.png" />
     <title>Hermes</title>
     <script>
+      // Which host this renderer is running in, before the first paint. The
+      // touch layout (`styles.css` gated on html[data-hermes-desktop-host='browser'])
+      // and `isBrowserHostedDesktop()` both key off this marker, and until now it
+      // was written only at the END of installBrowserDesktopBridge() — which
+      // returns early when there is no bootstrap (the /login surface) and, in the
+      // signed-in app, lands after the whole module graph has run. On a phone that
+      // meant a desktop-styled sign-in form (13.3px inputs → iOS zooms on focus)
+      // and a visible reflow into the 44px touch layout. Electron's preload sets
+      // window.hermesDesktop before this script runs, so the guard is exact.
+      // browser-desktop-bridge.ts:169 keeps writing it as the idempotent backstop.
+      if (!window.hermesDesktop) {
+        document.documentElement.dataset.hermesDesktopHost = 'browser'
+      }
       // Pre-paint the themed background before the app bundle loads. Without
       // this, the first frame (which is what `ready-to-show` waits for) is the
       // UA-default white page, and the real theme only lands once the whole

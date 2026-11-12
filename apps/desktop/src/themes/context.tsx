@@ -15,6 +15,7 @@ import { createContext, type ReactNode, useCallback, useContext, useEffect, useM
 
 import { $registryVersion } from '@/contrib/registry'
 import { matchesQuery, useMediaQuery } from '@/hooks/use-media-query'
+import { syncThemeColor } from '@/lib/mobile-chrome'
 import { persistString, persistStringRecord, storedString, storedStringRecord } from '@/lib/storage'
 import { recordFeatureUse } from '@/store/desktop-metrics'
 import { $activeGatewayProfile, normalizeProfileKey } from '@/store/profile'
@@ -393,6 +394,11 @@ function applyTheme(theme: DesktopTheme, mode: 'light' | 'dark', chatFontFamily 
   applyTypographyKnobs(root, typo)
 
   const chromeBg = chromeBackground(c.background, isDark)
+
+  // A phone's status bar is drawn outside the page: it takes its colour from a
+  // meta tag, which the boot HTML can only ship as a constant. Point it at the
+  // theme actually on screen, on every change and on boot.
+  syncThemeColor(chromeBg)
 
   window.hermesDesktop?.setTitleBarTheme?.({
     background: chromeBg,
