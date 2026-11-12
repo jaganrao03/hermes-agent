@@ -942,6 +942,56 @@ html[data-hermes-desktop-host='browser']
   }
 }
 
+/* NARROW DRAWER — the pane that slides over the conversation.
+
+   A revealed pane used to appear in one frame. It now travels: the drag hook
+   publishes how far the thumb has pulled as `--drawer-drag` (0 = closed,
+   1 = open) and this turns it into a transform, so the panel sits under the
+   finger and the browser can composite every frame instead of repainting the
+   transcript behind it. Transform only — animating width, left or margin would
+   relayout the whole tree on each frame, which is what made it stutter.
+
+   The transition is what settles the panel after the thumb lifts; while a drag
+   is live the document carries `data-drawer-drag` and the transition is off, or
+   the panel would lag a frame behind the finger. */
+[data-narrow-overlay] {
+  will-change: transform;
+}
+
+[data-narrow-overlay][data-narrow-overlay-side='left'] {
+  transform: translate3d(calc((var(--drawer-drag, 1) - 1) * 100%), 0, 0);
+}
+
+[data-narrow-overlay][data-narrow-overlay-side='right'] {
+  transform: translate3d(calc((1 - var(--drawer-drag, 1)) * 100%), 0, 0);
+}
+
+:root:not([data-drawer-drag]) [data-narrow-overlay] {
+  transition: transform 180ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+[data-narrow-overlay-backdrop] {
+  animation: narrow-drawer-fade 180ms ease-out both;
+}
+
+@keyframes narrow-drawer-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A pane revealed by hover on a desktop follows the same rule, so the motion is
+   identical whether the window is narrow or the pointer is a mouse. */
+@media (prefers-reduced-motion: reduce) {
+  [data-narrow-overlay] {
+    transition: none;
+  }
+
+  [data-narrow-overlay-backdrop] {
+    animation: none;
+  }
+}
+
 .dither {
   background: repeating-conic-gradient(currentColor 0% 25%, transparent 0% 50%) 0 0 / 0.125rem 0.125rem;
 }

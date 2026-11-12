@@ -23,22 +23,37 @@ function withCoarsePointer(coarse: boolean): void {
 }
 
 /** jsdom has no TouchEvent constructor; the hook only reads clientX/clientY. */
-function touch(type: 'touchstart' | 'touchend', x: number, y: number, target: EventTarget = document.body): void {
+function touch(
+  type: 'touchstart' | 'touchmove' | 'touchend',
+  x: number,
+  y: number,
+  target: EventTarget = document.body
+): void {
   const event = new Event(type, { bubbles: true })
   const point = { clientX: x, clientY: y }
   const list = [point]
 
   Object.defineProperties(event, {
-    touches: { value: type === 'touchstart' ? list : [] },
-    changedTouches: { value: type === 'touchstart' ? [] : list }
+    touches: { value: type === 'touchend' ? [] : list },
+    changedTouches: { value: type === 'touchend' ? list : [] }
   })
 
   target.dispatchEvent(event)
 }
 
-function drag(from: [number, number], to: [number, number], target: EventTarget = document.body): void {
-  touch('touchstart', ...from, target)
-  touch('touchend', ...to, target)
+/** A whole gesture: press, carry the thumb along a path, lift at the last point. */
+function drag(path: Array<[number, number]>, target: EventTarget = document.body): void {
+  touch('touchstart', ...path[0], target)
+
+  for (const point of path.slice(1, -1)) {
+    touch('touchmove', ...point)
+  }
+
+  touch('touchend', ...path[path.length - 1])
+}
+
+function progress(): string | null {
+  return document.documentElement.style.getPropertyValue('--drawer-drag') || null
 }
 
 function capture(): { seen: ReturnType<typeof vi.fn>; stop: () => void } {
@@ -48,40 +63,73 @@ function capture(): { seen: ReturnType<typeof vi.fn>; stop: () => void } {
   return { seen, stop: () => window.removeEventListener(PANE_TOGGLE_REVEAL_EVENT, seen) }
 }
 
+const detailOf = (seen: ReturnType<typeof vi.fn>, index = 0) => (seen.mock.calls[index][0] as CustomEvent).detail
+
 describe('useDrawerSwipe', () => {
   beforeEach(() => {
     withCoarsePointer(true)
     $narrowViewport.set(true)
     $narrowOverlayPaneIds.set(new Set())
+    document.documentElement.removeAttribute('data-drawer-drag')
+    document.documentElement.style.removeProperty('--drawer-drag')
   })
 
   afterEach(() => {
+    vi.useRealTimers()
     window.matchMedia = realMatchMedia
     $narrowViewport.set(false)
     $narrowOverlayPaneIds.set(new Set())
+    document.documentElement.removeAttribute('data-drawer-drag')
+    document.documentElement.style.removeProperty('--drawer-drag')
     vi.restoreAllMocks()
     document.body.innerHTML = ''
   })
 
-  it('opens the drawer from the middle of the conversation', () => {
+  it('reveals the drawer as soon as the thumb heads right, so it can follow', () => {
     // The left edge is Android's back gesture; the middle is the only free zone.
     const { seen, stop } = capture()
     renderHook(() => useDrawerSwipe())
 
-    drag([180, 420], [280, 424])
+    drag([[180, 420], [220, 424], [280, 428]])
 
-    expect(seen).toHaveBeenCalledTimes(1)
-    expect((seen.mock.calls[0][0] as CustomEvent).detail).toEqual({ id: 'sessions', mode: 'open' })
+    expect(detailOf(seen)).toEqual({ id: 'sessions', mode: 'open' })
     stop()
   })
 
-  it('opens the drawer from blank space low on the page', () => {
+  it('tracks the thumb and settles open past the commit distance', () => {
     const { seen, stop } = capture()
     renderHook(() => useDrawerSwipe())
 
-    drag([300, 700], [420, 706])
+    touch('touchstart', 180, 420)
+    touch('touchmove', 220, 422)
 
+    // Carried 40px of the 260px that means a full reveal: the panel is a sixth
+    // of the way out, not waiting for release.
+    expect(progress()).toBe('0.154')
     expect(seen).toHaveBeenCalledTimes(1)
+
+    touch('touchend', 260, 424)
+
+    expect(progress()).toBeNull()
+    expect(document.documentElement.hasAttribute('data-drawer-drag')).toBe(false)
+    expect(seen).toHaveBeenCalledTimes(1)
+    stop()
+  })
+
+  it('slides the panel back and closes when the thumb gives up', () => {
+    vi.useFakeTimers()
+    const { seen, stop } = capture()
+    renderHook(() => useDrawerSwipe())
+
+    drag([[180, 420], [196, 421], [200, 422]])
+
+    expect(detailOf(seen)).toEqual({ id: 'sessions', mode: 'open' })
+    expect(progress()).toBe('0.000')
+
+    vi.advanceTimersByTime(220)
+
+    expect(detailOf(seen, 1)).toEqual({ id: 'sessions', mode: 'close' })
+    expect(progress()).toBeNull()
     stop()
   })
 
@@ -89,9 +137,10 @@ describe('useDrawerSwipe', () => {
     const { seen, stop } = capture()
     renderHook(() => useDrawerSwipe())
 
-    drag([200, 300], [240, 470])
+    drag([[200, 300], [230, 340], [240, 470]])
 
     expect(seen).not.toHaveBeenCalled()
+    expect(progress()).toBeNull()
     stop()
   })
 
@@ -99,7 +148,7 @@ describe('useDrawerSwipe', () => {
     const { seen, stop } = capture()
     renderHook(() => useDrawerSwipe())
 
-    drag([200, 300], [230, 302])
+    drag([[200, 300], [206, 301], [208, 302]])
 
     expect(seen).not.toHaveBeenCalled()
     stop()
@@ -112,7 +161,7 @@ describe('useDrawerSwipe', () => {
     const { seen, stop } = capture()
     renderHook(() => useDrawerSwipe())
 
-    drag([200, 600], [320, 604], composer)
+    drag([[200, 600], [260, 602], [320, 604]], composer)
 
     expect(seen).not.toHaveBeenCalled()
     stop()
@@ -127,30 +176,51 @@ describe('useDrawerSwipe', () => {
     const { seen, stop } = capture()
     renderHook(() => useDrawerSwipe())
 
-    drag([200, 300], [320, 304], pre)
+    drag([[200, 300], [260, 302], [320, 304]], pre)
 
     expect(seen).not.toHaveBeenCalled()
     stop()
   })
 
-  it('flicks the open drawer away to the left', () => {
+  it('carries an open drawer away to the left and dismisses it', () => {
+    vi.useFakeTimers()
     const { seen, stop } = capture()
     $narrowOverlayPaneIds.set(new Set(['sessions', 'chat-sidebar']))
     renderHook(() => useDrawerSwipe())
 
-    drag([280, 500], [180, 505])
+    touch('touchstart', 280, 500)
+    touch('touchmove', 210, 502)
 
-    expect(seen).toHaveBeenCalledTimes(1)
-    expect((seen.mock.calls[0][0] as CustomEvent).detail).toEqual({ id: 'sessions', mode: 'close' })
+    // Dragged back left from fully open: the panel is already three quarters
+    // of the way out under the thumb.
+    expect(progress()).toBe('0.731')
+    expect(seen).not.toHaveBeenCalled()
+
+    touch('touchend', 200, 503)
+    vi.advanceTimersByTime(220)
+
+    expect(detailOf(seen)).toEqual({ id: 'sessions', mode: 'close' })
     stop()
   })
 
-  it('does not re-open a drawer that is already out', () => {
+  it('snaps an open drawer back when the thumb barely moves', () => {
     const { seen, stop } = capture()
     $narrowOverlayPaneIds.set(new Set(['sessions']))
     renderHook(() => useDrawerSwipe())
 
-    drag([120, 500], [240, 504])
+    drag([[280, 500], [250, 502], [240, 503]])
+
+    expect(seen).not.toHaveBeenCalled()
+    expect(progress()).toBeNull()
+    stop()
+  })
+
+  it('does not re-reveal a drawer that is already out', () => {
+    const { seen, stop } = capture()
+    $narrowOverlayPaneIds.set(new Set(['sessions']))
+    renderHook(() => useDrawerSwipe())
+
+    drag([[120, 500], [180, 502], [240, 504]])
 
     expect(seen).not.toHaveBeenCalled()
     stop()
@@ -161,7 +231,7 @@ describe('useDrawerSwipe', () => {
     const { seen, stop } = capture()
     renderHook(() => useDrawerSwipe())
 
-    drag([180, 420], [300, 424])
+    drag([[180, 420], [240, 422], [300, 424]])
 
     expect(seen).not.toHaveBeenCalled()
     stop()
@@ -172,7 +242,7 @@ describe('useDrawerSwipe', () => {
     const { seen, stop } = capture()
     renderHook(() => useDrawerSwipe())
 
-    drag([180, 420], [300, 424])
+    drag([[180, 420], [240, 422], [300, 424]])
 
     expect(seen).not.toHaveBeenCalled()
     stop()

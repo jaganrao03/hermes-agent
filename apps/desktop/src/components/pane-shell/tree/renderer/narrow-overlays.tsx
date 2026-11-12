@@ -276,6 +276,9 @@ export function NarrowOverlays() {
           // through text. Contract: `[data-glass-opaque]` in styles.css.
           data-glass-opaque=""
           data-narrow-overlay={revealed.id}
+          // Which edge it hangs from. The drag gesture publishes its progress
+          // as `--drawer-drag`, and styles.css picks the matching direction.
+          data-narrow-overlay-side={sideOf(revealed) === 'left' ? 'left' : 'right'}
           onMouseLeave={onMouseLeave}
           ref={overlayRef}
           // Match the pane's docked width (sessions ~237px, files its rail

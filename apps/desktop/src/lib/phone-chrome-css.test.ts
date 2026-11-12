@@ -39,4 +39,17 @@ describe('phone chrome', () => {
   it('leaves the session actions visible and thumb-sized without hover', () => {
     expect(phoneCss).toMatch(/\[data-session-actions\]\s*\{[^}]*width: 2\.25rem/)
   })
+
+  it('moves the narrow drawer with a transform, never with layout', () => {
+    // Animating left/width would relayout the transcript on every frame — the
+    // thing that made the drawer feel like it snapped.
+    expect(phoneCss).toMatch(/\[data-narrow-overlay\]\[data-narrow-overlay-side='left'\]\s*\{[^}]*translate3d/)
+    expect(phoneCss).toMatch(/\[data-narrow-overlay\]\[data-narrow-overlay-side='right'\]\s*\{[^}]*translate3d/)
+    expect(phoneCss).toContain('--drawer-drag')
+    expect(phoneCss).toContain(':root:not([data-drawer-drag]) [data-narrow-overlay]')
+  })
+
+  it('drops the drawer motion for anyone who asked for less of it', () => {
+    expect(phoneCss).toContain('prefers-reduced-motion: reduce')
+  })
 })
