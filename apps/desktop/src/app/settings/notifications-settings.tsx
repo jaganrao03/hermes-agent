@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useI18n } from '@/i18n'
+import { browserNotificationPermission } from '@/lib/browser-notifications'
 import { COMPLETION_SOUND_VARIANTS, previewCompletionSound } from '@/lib/completion-sound'
 import { triggerHaptic } from '@/lib/haptics'
 import { hostHas } from '@/lib/host-capabilities'
@@ -145,7 +146,23 @@ export function NotificationsSettings({ subpage }: NotificationsSettingsProps = 
     }
 
     const ok = await sendTestNativeNotification(copy.testTitle, copy.testBody)
-    notify({ kind: ok ? 'info' : 'error', message: ok ? copy.testSent : copy.testUnsupported })
+
+    if (ok) {
+      notify({ kind: 'info', message: copy.testSent })
+
+      return
+    }
+
+    // A failed test is almost always a permission problem, and "not supported"
+    // sends the user hunting for the wrong thing: say which gate is closed.
+    const permission = browserNotificationPermission()
+
+    const reason =
+      permission === 'granted'
+        ? copy.testUnsupported
+        : (copy.browserPermission.states[permission] ?? copy.testUnsupported)
+
+    notify({ kind: 'error', message: reason })
   }
 
   return (

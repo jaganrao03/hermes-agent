@@ -65,3 +65,18 @@ it.each([
   expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull()
   expect(screen.getByText(state)).toBeTruthy()
 })
+
+it('names the closed gate when a test notification cannot be shown', async () => {
+  const { notify } = await import('@/store/notifications')
+  const { sendTestNativeNotification } = await import('@/store/native-notifications')
+  FakeNotification.answer = 'denied'
+  vi.mocked(sendTestNativeNotification).mockResolvedValueOnce(false)
+  renderAlerts()
+
+  await act(async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Send test notification' }))
+  })
+
+  // "Not supported" would send the user hunting for the wrong setting.
+  expect(vi.mocked(notify)).toHaveBeenCalledWith(expect.objectContaining({ message: expect.stringMatching(/blocked/i) }))
+})
