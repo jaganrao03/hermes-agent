@@ -349,6 +349,10 @@ export const SESSION_WATCHDOG_TIMEOUT_MS = 5 * 60 * 1000
 export const LIVE_TURN_EVENT_SILENCE_MS = 45_000
 // Bound on the status request itself; past it the check counts as unanswered.
 export const LIVE_TURN_PROBE_TIMEOUT_MS = 15_000
+// A session missing from a well-formed active list is re-read this much later
+// before the turn is called over: absent is the one answer a wrong connection or
+// a rotated authority can give for live work, so it gets one confirmation.
+export const LIVE_TURN_ABSENT_CONFIRM_MS = 2_000
 const sessionEventSilenceTimers = new Map<string, ReturnType<typeof setTimeout>>()
 // One token per status check in flight: an event, a settle, or a newer check
 // drops it, so a late answer cannot act on a turn that moved on.
@@ -396,31 +400,55 @@ export function isLiveTurnAwaitingEvents(state: ClientSessionState | undefined):
 
 export type LiveTurnVerdict = 'ended' | 'running' | 'unknown'
 
+/** What one `session.active_list` snapshot says about `runtimeId`'s turn, before
+ *  the two "over" shapes are collapsed: an ``idle`` row is the backend naming
+ *  this session and saying its turn is done, while ``absent`` only says this
+ *  authority's list does not hold the session. A list answered by the wrong
+ *  connection, a profile that does not own the runtime, or an authority that
+ *  rotated its epoch all omit a turn that is still running, so ``absent`` is
+ *  the weaker signal and onEventSilence confirms it before acting. */
+export type LiveTurnReading = 'absent' | 'idle' | 'running' | 'unknown'
+
 interface LiveTurnStatusResponse {
   sessions?: { id?: string; status?: string }[]
 }
 
-/** What one `session.active_list` snapshot says about `runtimeId`'s turn. A
- *  runtime missing from a well-formed list has been reaped: its turn is over.
- *  `starting` is an agent build for a turn the backend accepted. */
-export function liveTurnVerdict(
+export function liveTurnReading(
   response: LiveTurnStatusResponse | null | undefined,
   runtimeId: string
-): LiveTurnVerdict {
+): LiveTurnReading {
   if (!Array.isArray(response?.sessions)) {
     return 'unknown'
   }
 
-  const status = response.sessions.find(session => session.id?.trim() === runtimeId)?.status
+  const session = response.sessions.find(row => row.id?.trim() === runtimeId)
 
-  if (status === undefined || status === 'idle') {
-    return 'ended'
+  if (!session) {
+    return 'absent'
   }
 
-  return status === 'starting' || status === 'waiting' || status === 'working' ? 'running' : 'unknown'
+  if (session.status === undefined || session.status === 'idle') {
+    return 'idle'
+  }
+
+  return session.status === 'starting' || session.status === 'waiting' || session.status === 'working'
+    ? 'running'
+    : 'unknown'
 }
 
-async function checkLiveTurn(runtimeId: string): Promise<LiveTurnVerdict> {
+/** What `session.active_list` says, as the two shapes callers act on. A runtime
+ *  missing from a well-formed list reads as over; `starting` is an agent build
+ *  for a turn the backend accepted. */
+export function liveTurnVerdict(
+  response: LiveTurnStatusResponse | null | undefined,
+  runtimeId: string
+): LiveTurnVerdict {
+  const reading = liveTurnReading(response, runtimeId)
+
+  return reading === 'unknown' ? 'unknown' : reading === 'running' ? 'running' : 'ended'
+}
+
+async function checkLiveTurn(runtimeId: string): Promise<LiveTurnReading> {
   const backend = liveTurnBackend
 
   if (!backend) {
@@ -439,7 +467,7 @@ async function checkLiveTurn(runtimeId: string): Promise<LiveTurnVerdict> {
       LIVE_TURN_PROBE_TIMEOUT_MS
     )
 
-    return liveTurnVerdict(response, runtimeId)
+    return liveTurnReading(response, runtimeId)
   } catch {
     return 'unknown'
   }
@@ -517,7 +545,11 @@ async function recoverEndedLiveTurn(runtimeId: string) {
 /** The silence window ran out: ask the backend. Running keeps the turn and
  *  restarts the clock; no answer (gateway down, request failed, owner unknown)
  *  also keeps it — the stall hint and Stop remain — and asks again next window.
- *  Only a backend that reports the turn over settles it. */
+ *  A backend that names the session as ``idle`` settles it at once. A session
+ *  merely *absent* from the list settles it only on a second reading: absence is
+ *  also what a wrong connection, a non-owning profile or a rotated authority
+ *  epoch answers for a turn that is very much still running, and a retry card
+ *  over live work is worse than one that arrives two seconds later. */
 async function onEventSilence(runtimeId: string) {
   sessionEventSilenceTimers.delete(runtimeId)
 
@@ -527,20 +559,41 @@ async function onEventSilence(runtimeId: string) {
 
   const check = {}
   silentTurnChecks.set(runtimeId, check)
-  const verdict = await checkLiveTurn(runtimeId)
+  const reading = await checkLiveTurn(runtimeId)
 
   if (silentTurnChecks.get(runtimeId) !== check) {
     return
   }
 
-  silentTurnChecks.delete(runtimeId)
-
-  if (verdict !== 'ended') {
+  if (reading !== 'idle' && reading !== 'absent') {
+    silentTurnChecks.delete(runtimeId)
     noteSessionEvent(runtimeId)
 
     return
   }
 
+  if (reading === 'absent') {
+    await new Promise(resolve => setTimeout(resolve, LIVE_TURN_ABSENT_CONFIRM_MS))
+
+    if (silentTurnChecks.get(runtimeId) !== check) {
+      return
+    }
+
+    const confirmed = await checkLiveTurn(runtimeId)
+
+    if (silentTurnChecks.get(runtimeId) !== check) {
+      return
+    }
+
+    if (confirmed !== 'idle' && confirmed !== 'absent') {
+      silentTurnChecks.delete(runtimeId)
+      noteSessionEvent(runtimeId)
+
+      return
+    }
+  }
+
+  silentTurnChecks.delete(runtimeId)
   settleEndedLiveTurn(runtimeId)
   await recoverEndedLiveTurn(runtimeId)
 }

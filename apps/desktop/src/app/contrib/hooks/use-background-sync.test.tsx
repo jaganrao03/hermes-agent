@@ -12,6 +12,7 @@ import {
   $sessionStates,
   $workingSessionIds,
   clearAllSessionStates,
+  LIVE_TURN_ABSENT_CONFIRM_MS,
   LIVE_TURN_EVENT_SILENCE_MS,
   noteSessionEvent,
   publishSessionState
@@ -358,7 +359,8 @@ describe('useBackgroundSync keeps a quiet working turn live', () => {
     request.mockImplementation(async () => ({ sessions: [] }))
 
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(LIVE_TURN_EVENT_SILENCE_MS)
+      // Absence is re-read once before it counts, so clear both windows.
+      await vi.advanceTimersByTimeAsync(LIVE_TURN_EVENT_SILENCE_MS + LIVE_TURN_ABSENT_CONFIRM_MS + 1)
     })
 
     expect($workingSessionIds.get()).not.toContain('s-quiet')

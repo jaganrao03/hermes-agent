@@ -21,6 +21,13 @@ import { allowErrorBanners, expect, test } from './test'
 
 type Page = MockBackendFixture['page']
 
+/** The slice of Electron's BrowserWindow this rig touches inside `app.evaluate`. */
+interface MainWindowHandle {
+  getBounds: () => { height: number; width: number; x: number; y: number }
+  setBounds: (bounds: { height: number; width: number; x: number; y: number }) => void
+  unmaximize: () => void
+}
+
 const SHOT_DIR = process.env.SHOT_DIR || path.join(os.tmpdir(), 'group-room-native')
 const NL = String.fromCharCode(10)
 const MULTIPLEX = ['gateway:', '  multiplex_profiles: true', ''].join(NL)
@@ -64,7 +71,7 @@ async function applyTheme(): Promise<void> {
 }
 
 async function sizeWindow(): Promise<void> {
-  const bounds = await fixture!.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map(win => {
+  const bounds = await fixture!.app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().map((win: MainWindowHandle) => {
     win.unmaximize()
     win.setBounds({ x: 0, y: 0, width: 1400, height: 900 })
 

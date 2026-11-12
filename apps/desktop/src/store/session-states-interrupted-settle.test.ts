@@ -10,6 +10,7 @@ import {
   $sessionStates,
   $workingSessionIds,
   clearAllSessionStates,
+  LIVE_TURN_ABSENT_CONFIRM_MS,
   LIVE_TURN_EVENT_SILENCE_MS,
   noteSessionEvent,
   publishSessionState,
@@ -24,6 +25,9 @@ vi.mock('@/store/gateway', async importActual => ({
 // Read from the store rather than restating the threshold: this asserts what
 // happens when the silence window runs out, not what the window is.
 const SILENCE_MS = LIVE_TURN_EVENT_SILENCE_MS
+// A session absent from the active list is re-read once before it is called
+// over, so absence-based expectations advance past that second reading.
+const OVER_MS = SILENCE_MS + LIVE_TURN_ABSENT_CONFIRM_MS + 1
 
 function liveTurn(over: Partial<ClientSessionState> = {}): ClientSessionState {
   return {
@@ -80,7 +84,7 @@ describe('settling a deliberately interrupted live turn', () => {
     })
     releaseBackend = setLiveTurnBackend({ request: vi.fn(async () => ({ sessions: [] })) as never })
 
-    await vi.advanceTimersByTimeAsync(SILENCE_MS)
+    await vi.advanceTimersByTimeAsync(OVER_MS)
 
     const settled = $sessionStates.get()['rt-stop']
     expect(settled?.interrupted).toBe(true)
@@ -95,7 +99,7 @@ describe('settling a deliberately interrupted live turn', () => {
     releaseBackend = setLiveTurnBackend({ request: vi.fn(async () => ({ sessions: [] })) as never })
     noteSessionEvent('rt-gone')
 
-    await vi.advanceTimersByTimeAsync(SILENCE_MS)
+    await vi.advanceTimersByTimeAsync(OVER_MS)
 
     const failed = card('rt-gone')
     expect($workingSessionIds.get()).not.toContain('s-gone')

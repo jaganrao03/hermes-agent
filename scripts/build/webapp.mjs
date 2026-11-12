@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { productOutput, withProduct, workspaceTool } from './frontend-common.mjs'
 import { buildInputs, outputIntact, recordProduct, sourceHash } from './freshness.mjs'
+import { pruneStaleAssets } from './prune-webapp-assets.mjs'
 
 // Vite's build manifest (apps/desktop/vite.config.ts names it too): the files a generation emitted.
 const manifestName = 'renderer-manifest.json'
@@ -89,7 +90,14 @@ export async function buildWebapp({ source, workspace, out }) {
     })
     if (!existsSync(join(product, 'index.html'))) throw new Error('Webapp build did not produce index.html')
     // Before the receipt, whose output hash covers the kept files too.
-    keepPreviousGeneration(out, product)
+    const retained = keepPreviousGeneration(out, product)
+    // Everything under assets/ must be named by this generation's manifest or retained for a tab on
+    // the previous one; anything else is a leftover nothing links to. Set
+    // HERMES_PRUNE_RETAINED_CHUNKS=1 to drop the retained set as well — correct for a deployment
+    // that reloads every client anyway, at the cost of an old tab's unloaded lazy chunk.
+    const keep = process.env.HERMES_PRUNE_RETAINED_CHUNKS === '1' ? new Set() : new Set(retained)
+    const { removed } = pruneStaleAssets({ product, keep })
+    if (removed.length) console.log(`webapp: pruned ${removed.length} stale asset(s): ${removed.join(', ')}`)
     recordProduct({ source, product: 'webapp', out: product, inputs })
   }, { source })
   return { out, index: join(out, 'index.html') }

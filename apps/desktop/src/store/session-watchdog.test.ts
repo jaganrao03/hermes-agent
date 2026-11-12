@@ -12,8 +12,10 @@ import {
   $stalledSessionIds,
   $workingSessionIds,
   clearAllSessionStates,
+  LIVE_TURN_ABSENT_CONFIRM_MS,
   LIVE_TURN_EVENT_SILENCE_MS,
   LIVE_TURN_PROBE_TIMEOUT_MS,
+  liveTurnReading,
   liveTurnVerdict,
   noteSessionEvent,
   publishSessionState,
@@ -182,6 +184,10 @@ describe('live turn event silence', () => {
 
   const card = (runtimeId: string) => $sessionStates.get()[runtimeId]?.messages.find(message => message.errorSurface)
 
+  // A turn the list omits is re-read before it is called over, so absence-based
+  // expectations advance past both the silence window and that second reading.
+  const OVER_MS = SILENCE_MS + LIVE_TURN_ABSENT_CONFIRM_MS + 1
+
   beforeEach(() => {
     vi.useFakeTimers()
     clearAllSessionStates()
@@ -289,13 +295,46 @@ describe('live turn event silence', () => {
     backend(async () => ({ sessions: [] }))
     noteSessionEvent('rt-empty')
 
-    await vi.advanceTimersByTimeAsync(SILENCE_MS)
+    await vi.advanceTimersByTimeAsync(OVER_MS)
 
     const failed = card('rt-empty')
     expect($workingSessionIds.get()).not.toContain('s-empty')
     expect(failed?.errorSurface?.code).toBe('no_reply')
     expect(errorCardOffers(failed?.errorSurface, 'retry')).toBe(true)
     expect(failed?.error).not.toMatch(/connection/i)
+  })
+
+  it('does not paint a retry when a second reading finds the turn still running', async () => {
+    // The shape that painted "Hermes ended this turn without a reply" over live
+    // work: one list answered for a connection that does not hold this session.
+    $activeSessionId.set('rt-ghost')
+    publishSessionState('rt-ghost', state({ awaitingResponse: true, busy: true, storedSessionId: 's-ghost', turnLive: true }))
+
+    const answers = [{ sessions: [] }, listing('rt-ghost', 'working'), listing('rt-ghost', 'working')]
+    const request = backend(async () => answers.shift() ?? listing('rt-ghost', 'working'))
+    noteSessionEvent('rt-ghost')
+
+    await vi.advanceTimersByTimeAsync(OVER_MS)
+
+    expect(request).toHaveBeenCalledTimes(2)
+    expect(card('rt-ghost')).toBeUndefined()
+    expect($workingSessionIds.get()).toContain('s-ghost')
+    expect($sessionStates.get()['rt-ghost']?.busy).toBe(true)
+  })
+
+  it('settles a session the backend names as idle on the first reading', async () => {
+    $activeSessionId.set('rt-idle')
+    publishSessionState('rt-idle', state({ awaitingResponse: true, busy: true, storedSessionId: 's-idle', turnLive: true }))
+
+    const request = backend(async () => listing('rt-idle', 'idle'))
+    noteSessionEvent('rt-idle')
+
+    await vi.advanceTimersByTimeAsync(SILENCE_MS)
+
+    // An idle row names this session, so no confirmation round is needed.
+    expect(request).toHaveBeenCalledTimes(1)
+    expect(card('rt-idle')?.errorSurface?.code).toBe('no_reply')
+    expect($sessionStates.get()['rt-idle']?.busy).toBe(false)
   })
 
   it('pulls the stored reply for a turn on screen before deciding it had none', async () => {
@@ -317,7 +356,7 @@ describe('live turn event silence', () => {
     backend(async () => ({ sessions: [] }), refreshTranscript)
     noteSessionEvent('rt-screen')
 
-    await vi.advanceTimersByTimeAsync(SILENCE_MS)
+    await vi.advanceTimersByTimeAsync(OVER_MS)
 
     expect(refreshTranscript).toHaveBeenCalledWith('rt-screen', 's-screen')
     expect(card('rt-screen')).toBeUndefined()
@@ -329,7 +368,7 @@ describe('live turn event silence', () => {
     backend(async () => ({ sessions: [] }), refreshTranscript)
     noteSessionEvent('rt-bg')
 
-    await vi.advanceTimersByTimeAsync(SILENCE_MS)
+    await vi.advanceTimersByTimeAsync(OVER_MS)
 
     expect(refreshTranscript).not.toHaveBeenCalled()
     expect($workingSessionIds.get()).not.toContain('s-bg')
@@ -369,7 +408,7 @@ describe('live turn event silence', () => {
     backend(async () => ({ sessions: [] }))
     noteSessionEvent('rt-held')
 
-    await vi.advanceTimersByTimeAsync(SILENCE_MS)
+    await vi.advanceTimersByTimeAsync(OVER_MS)
 
     expect(updateHeldSession).toHaveBeenCalledWith('rt-held', expect.any(Function))
     expect($workingSessionIds.get()).not.toContain('s-held')
@@ -426,5 +465,20 @@ describe('liveTurnVerdict', () => {
     expect(liveTurnVerdict(snapshot, 'e')).toBe('unknown')
     expect(liveTurnVerdict({}, 'a')).toBe('unknown')
     expect(liveTurnVerdict(null, 'a')).toBe('unknown')
+  })
+
+  it('keeps an idle row apart from a session the list omits', () => {
+    const snapshot = {
+      sessions: [
+        { id: 'idle', status: 'idle' },
+        { id: 'named', status: 'working' }
+      ]
+    }
+
+    expect(liveTurnReading(snapshot, 'idle')).toBe('idle')
+    expect(liveTurnReading(snapshot, 'named')).toBe('running')
+    expect(liveTurnReading(snapshot, 'gone')).toBe('absent')
+    expect(liveTurnReading({ sessions: [] }, 'gone')).toBe('absent')
+    expect(liveTurnReading(null, 'gone')).toBe('unknown')
   })
 })
