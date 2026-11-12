@@ -925,6 +925,21 @@ html[data-hermes-desktop-host='browser']
   html[data-hermes-desktop-host='browser'] [data-slot='assistant-follow-up-suggestions'] {
     overscroll-behavior-x: contain;
   }
+
+  /* A session row's kebab is revealed by hover on a desktop. A phone has no
+     hover, so Archive — the one action that deals with a session whose task is
+     finished — was a 20px invisible tap. Show it, and give it a thumb-sized box
+     that the row's trailing figures yield to. */
+  html[data-hermes-desktop-host='browser'] [data-session-actions] {
+    width: 2.25rem;
+    height: 2.25rem;
+    color: var(--ui-text-tertiary);
+  }
+
+  html[data-hermes-desktop-host='browser'] [data-session-actions] svg {
+    width: 1rem;
+    height: 1rem;
+  }
 }
 
 .dither {
