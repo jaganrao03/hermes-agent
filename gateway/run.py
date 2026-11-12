@@ -4425,6 +4425,28 @@ def _housekeeping_memory_trim() -> None:
     trim_memory_when_idle(reason="messaging gateway housekeeping")
 
 
+def _housekeeping_settle_stale_lost_turns(runner) -> None:
+    """A person's turn lost to a mid-turn restart clears once stale WHILE the gateway runs.
+
+    The boot sweep (``initialize_session_authority``) only helps the next startup: a gateway that
+    restarted once and then stayed up kept fencing that chat with ``unknown_execution`` — the
+    desktop showed "Turn lost during restart" and refused every new prompt instead of queueing it —
+    until somebody pressed Discard. Same sweep, same guards (owner epoch, stale activity window),
+    run on the tick so recovery does not depend on another restart.
+    """
+    authority = getattr(runner, "session_authority", None) if runner is not None else None
+    if authority is None:
+        return
+    from gateway.session_unattended_unknown import settle_recovered_dead_owner_stale
+    try:
+        settled = settle_recovered_dead_owner_stale(authority.db, authority.epoch)
+    except Exception as exc:  # never let recovery take the tick down
+        logger.warning("Stale lost-turn settle failed: %s", exc)
+        return
+    if settled:
+        logger.info("Settled %d stale lost turn(s) fenced by a dead owner", settled)
+
+
 def _housekeeping_checkpoint_prune() -> None:
     """Checkpoint store retention + size cap on a live timer; ``auto_prune_from_config`` gates on
     ``checkpoints.auto_prune`` and the 24h ``.last_prune`` marker. Off the startup path because its
@@ -4481,6 +4503,9 @@ def _start_gateway_housekeeping(
     chores += [
         (5, "Channel directory refresh", lambda: adapters and _housekeeping_channel_directory(adapters, loop)),
         (60, "Media cache cleanup", housekeeping_media_caches),
+        # Every tick: a turn fenced `unknown` by a restart stops blocking its chat's FIFO here,
+        # not only at the next boot (see _housekeeping_settle_stale_lost_turns).
+        (1, "Stale lost-turn settle", lambda: _housekeeping_settle_stale_lost_turns(runner)),
         (60, "Paste sweep", _housekeeping_paste_sweep)]
     # Low disk + auto-prune undecided: ask on the home channel (two syscalls; snoozed per post).
     chores.append((1, "Auto-prune low-disk prompt", lambda: maybe_post_auto_prune_prompt(runner, loop)))
