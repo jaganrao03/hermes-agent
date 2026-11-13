@@ -30,9 +30,13 @@ export const IMAGE_EXTENSION_BY_MIME: Record<string, string> = Object.fromEntrie
 )
 
 function normalizedExtension(value: string): string {
-  const clean = String(value || '').trim().toLowerCase()
+  const clean = String(value || '')
+    .trim()
+    .toLowerCase()
 
-  if (!clean) {return ''}
+  if (!clean) {
+    return ''
+  }
 
   return clean.startsWith('.') ? clean : `.${clean}`
 }
@@ -111,7 +115,9 @@ function stageResponse(text: string): StageResponse {
 }
 
 function uploadFailure(status: number, detail: unknown): string {
-  if (typeof detail === 'string' && detail) {return detail}
+  if (typeof detail === 'string' && detail) {
+    return detail
+  }
 
   return status === 413
     ? 'File upload failed (413): the file is larger than the server or a proxy in front of it accepts'
@@ -162,17 +168,25 @@ function selectBrowserFiles(
   fallbackProfile: null | string,
   onStaged: OnStaged
 ): Promise<string[]> {
-  if (options?.directories) {return Promise.resolve([])}
+  if (options?.directories) {
+    return Promise.resolve([])
+  }
 
   return new Promise<string[]>((resolve, reject) => {
     const input = document.createElement('input')
     input.type = 'file'
-    input.multiple = Boolean(options?.multiple)
+    // A camera capture is one still from the viewfinder: `capture` overrides
+    // `multiple` in every browser that honours it, and the accept list must be
+    // images or the attribute is ignored.
+    input.multiple = Boolean(options?.multiple) && !options?.capture
     input.style.display = 'none'
 
     const extensions = (options?.filters || []).flatMap(filter => filter.extensions || [])
 
-    if (extensions.length) {
+    if (options?.capture) {
+      input.accept = 'image/*'
+      input.setAttribute('capture', options.capture)
+    } else if (extensions.length) {
       input.accept = extensions.map(extension => `.${extension.replace(/^\./, '')}`).join(',')
     }
 
@@ -221,7 +235,12 @@ export function createBrowserUploadsBridge({
   previewUrls
 }: BrowserUploadsOptions): Pick<
   Window['hermesDesktop'],
-  'getStagedFileDisplayName' | 'getStagedFileForAttach' | 'saveImageBuffer' | 'savePastedText' | 'selectPaths' | 'stageFileForAttach'
+  | 'getStagedFileDisplayName'
+  | 'getStagedFileForAttach'
+  | 'saveImageBuffer'
+  | 'savePastedText'
+  | 'selectPaths'
+  | 'stageFileForAttach'
 > {
   const displayNames = new Map<string, string>()
   const stagedUploads = new Map<string, HermesStagedUpload>()
@@ -245,7 +264,9 @@ export function createBrowserUploadsBridge({
     const imageMime = IMAGE_MIME_BY_EXTENSION[extension]
 
     if (UNSENDABLE_IMAGE_EXTENSIONS.has(extension)) {
-      throw new Error("SVG and ICO images can't be attached in the browser. Attach a PNG, JPEG, GIF, WebP or BMP instead.")
+      throw new Error(
+        "SVG and ICO images can't be attached in the browser. Attach a PNG, JPEG, GIF, WebP or BMP instead."
+      )
     }
 
     // /api/chat/image-upload stores images up to 25 MiB, but the send reads the staged image back
@@ -283,7 +304,9 @@ export function createBrowserUploadsBridge({
     const url = URL.createObjectURL(blob)
     objectUrls.add(url)
 
-    if (isHtml) { previewUrls.add(url) }
+    if (isHtml) {
+      previewUrls.add(url)
+    }
 
     return url
   }
@@ -292,9 +315,13 @@ export function createBrowserUploadsBridge({
     getStagedFileDisplayName: (path: string) => displayNames.get(path),
     getStagedFileForAttach: (path: string) => stagedUploads.get(path),
     saveImageBuffer: saveBuffer,
-    savePastedText: (text: string) => stageBrowserFile(
-      bootstrap, new File([text], 'pasted.txt', { type: 'text/plain' }), currentProfile(), rememberStaged
-    ),
+    savePastedText: (text: string) =>
+      stageBrowserFile(
+        bootstrap,
+        new File([text], 'pasted.txt', { type: 'text/plain' }),
+        currentProfile(),
+        rememberStaged
+      ),
     selectPaths: options => selectBrowserFiles(bootstrap, options, currentProfile(), rememberStaged),
     stageFileForAttach: (file: File) => stageBrowserFile(bootstrap, file, currentProfile(), rememberStaged)
   }

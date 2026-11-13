@@ -660,7 +660,10 @@ declare global {
       }) => Promise<PreviewSigninsResult>
       // P2-7: the per-profile imported-sign-ins record + cookie jar live in Electron main (userData),
       // so the renderer's local profile rename/delete flow signals main to move/clear them.
-      migratePreviewSigninsForProfile?: (request: { oldProfile: string; newProfile: string }) => Promise<{ ok: boolean }>
+      migratePreviewSigninsForProfile?: (request: {
+        oldProfile: string
+        newProfile: string
+      }) => Promise<{ ok: boolean }>
       dropPreviewSigninsForProfile?: (request: { profile: string }) => Promise<{ ok: boolean }>
       setActiveConnectionRoute?: (
         route: {
@@ -1891,6 +1894,10 @@ export interface HermesSelectPathsOptions {
   /** Backend profile that produced defaultPath; Electron uses it for WSL gating. */
   profile?: string
   filters?: Array<{ name: string; extensions: string[] }>
+  /** Browser-hosted only: open the OS camera straight away (`capture="environment"`
+   *  on the hidden file input) instead of a gallery picker. Electron ignores it —
+   *  there is no camera element in the native picker. */
+  capture?: 'environment' | 'user'
 }
 
 export interface BackendExit {

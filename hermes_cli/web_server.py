@@ -581,6 +581,12 @@ class _LocalOriginCORSMiddleware(CORSMiddleware):
 # *outermost* middleware (Starlette's onion: last-added runs first).
 # Without this, an OPTIONS preflight from a cross-origin SPA hits the auth
 # middlewares before CORS can answer, producing 401 instead of 204 + headers.
+# Compress text responses (JS/CSS/JSON/HTML). The webapp bundle was served raw: the main JS is
+# 3.4 MB (1.0 MB gzipped), the syntax-highlighter bundle 19.5 MB (3.3 MB), noticeable over
+# Tailscale. Starlette's GZipMiddleware skips text/event-stream and compresses >=128 KiB
+# bodies in a worker thread, so streaming and the event loop are unaffected.
+from starlette.middleware.gzip import GZipMiddleware
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 app.add_middleware(_LocalOriginCORSMiddleware, allow_methods=["*"], allow_headers=["*"])
 
 

@@ -1,5 +1,8 @@
 // Loaded by src/entry.ts once the machine's shared UI preferences hydrated.
 import './styles.css'
+// Motion pack: the app's repeated micro-transitions (see the file header for
+// the two rules it must keep — compositor-only properties, no decorative loops).
+import './app/chat/motion.css'
 // Install the loopback browser host before any store/App modules evaluate.
 // Electron preload remains authoritative when its bridge already exists.
 import './lib/browser-desktop-bridge-install'

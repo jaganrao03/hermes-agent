@@ -67,6 +67,13 @@ AUTOMATION_INTERRUPTED_NOTICE = (
     "An automated delivery was interrupted and was not run again. Some "
     "actions may already have run; verify their effects."
 )
+# A turn a PERSON sent, lost with the owner that claimed it and still unresolved at the next start:
+# boot recovery settles it interrupted instead of pausing that session's FIFO indefinitely, so the
+# person is told here rather than by a restore that refuses with ``unknown_execution``.
+LOST_TURN_NOTICE = (
+    "This turn was lost when Hermes restarted and was not run again. Send it again if you still "
+    "need it; some earlier actions may already have run."
+)
 # Durable tail roles a failed turn leaves open: its accepted ``user`` row, or the ``tool`` row of a
 # call that ran before the failure. An ``assistant`` tail is already closed (a reply or a boundary).
 OPEN_TURN_TAIL_ROLES = frozenset({"user", "tool"})

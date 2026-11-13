@@ -19,6 +19,7 @@ import { useMessageReactions } from '@/components/assistant-ui/thread/use-messag
 import { UserMessageText } from '@/components/assistant-ui/thread/user-message-text'
 import { Button } from '@/components/ui/button'
 import { Codicon } from '@/components/ui/codicon'
+import { CopyButton } from '@/components/ui/copy-button'
 import { Tip } from '@/components/ui/tooltip'
 import { useResizeObserver } from '@/hooks/use-resize-observer'
 import { useI18n } from '@/i18n'
@@ -275,10 +276,6 @@ const UserBubbleActions: FC<UserBubbleActionsProps> = ({
 }) => {
   const copy = useI18n().t.assistant.thread
 
-  if (touch && !showStop && !showRestore) {
-    return null
-  }
-
   return (
     <div
       className={cn(
@@ -289,6 +286,16 @@ const UserBubbleActions: FC<UserBubbleActionsProps> = ({
       )}
     >
       {!touch && <MessageHoverTime className={cn(!showStop && !showRestore && 'pr-0.5')} />}
+      {/* Copy the prompt itself. Drag-selecting a long prompt that clamps behind
+          the sticky bubble is the only way to get it otherwise, and a sent
+          prompt is exactly what an operator re-sends or reuses. Shown on touch
+          too, where this cluster is the only explicit affordance. */}
+      <CopyButton
+        appearance="icon"
+        buttonSize="icon"
+        className={cn('pointer-events-auto', touch ? 'size-11' : 'size-5', USER_ACTION_ICON_BUTTON_CLASS)}
+        text={fullText}
+      />
       {showStop ? (
         <button
           aria-label={copy.stop}

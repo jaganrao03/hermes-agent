@@ -60,6 +60,8 @@ export interface ChatBarProps {
   onPickFiles?: () => void
   onPickFolders?: () => void
   onPickImages?: () => void
+  /** Phone-only affordance: capture a photo with the OS camera instead of picking one. */
+  onCaptureImage?: () => void
   onRemoveAttachment?: (id: string) => void
   onSteer?: (text: string, mode?: 'interrupt' | 'steer') => Promise<boolean> | boolean
   /** Delivers a hidden note to the model mid-turn with no user turn (gateway session.steer). */

@@ -35,9 +35,44 @@ logger = logging.getLogger(__name__)
 _memory_surface_flags: ContextVar[Optional[tuple[bool, bool]]] = ContextVar("memory_surface_flags", default=None)
 
 
+_ISOLATED_MEMORY_PROFILES = frozenset({"harshitha", "sandbox"})
+
+
+def _is_isolated_memory_home(home: Path) -> bool:
+    """True for the two profiles that must never inherit Jagan's shared memory."""
+    return home.parent.name == "profiles" and home.name in _ISOLATED_MEMORY_PROFILES
+
+
 def get_memory_dir() -> Path:
     """Profile-scoped memories dir, resolved per call (HERMES_HOME may switch after import)."""
     return get_hermes_home() / "memories"
+
+
+def get_shared_memory_dir() -> Optional[Path]:
+    """Read-only memory base inherited by Jagan's non-isolated profiles.
+
+    ``memory.shared_home`` names a Hermes root; its ``memories/`` directory is
+    prepended to this profile's own entries at load time. Isolated profiles
+    ignore the setting even if their config contains it.
+    """
+    home = get_hermes_home()
+    if _is_isolated_memory_home(home):
+        return None
+    try:
+        from hermes_cli.config import cfg_get, load_config_readonly
+
+        shared_home = cfg_get(load_config_readonly(), "memory", "shared_home", default="")
+    except Exception:
+        return None
+    if not isinstance(shared_home, str) or not shared_home.strip():
+        return None
+    shared_root = Path(shared_home).expanduser()
+    if shared_root.parent.name == "profiles" and shared_root.name in _ISOLATED_MEMORY_PROFILES:
+        return None
+    shared = shared_root / "memories"
+    if shared.resolve(strict=False) == (home / "memories").resolve(strict=False):
+        return None
+    return shared
 
 
 from tools.memory_tool_store import (

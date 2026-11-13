@@ -334,7 +334,8 @@ function TileChat({
   // store updates) re-renders the whole chat shell. The individual composer
   // functions are useCallback'd inside useComposerActions, so hoisting these
   // wrappers onto them keeps identity stable across renders.
-  const { addContextRefAttachment, pasteClipboardImage, pickContextPaths, pickImages, removeAttachment } = composer
+  const { addContextRefAttachment, captureImage, pasteClipboardImage, pickContextPaths, pickImages, removeAttachment } =
+    composer
 
   const onAddUrl = useCallback(
     (url: string) => addContextRefAttachment(`@url:${formatRefValue(url)}`, url),
@@ -349,6 +350,7 @@ function TileChat({
   const onPickFiles = useCallback(() => void pickContextPaths('file'), [pickContextPaths])
   const onPickFolders = useCallback(() => void pickContextPaths('folder'), [pickContextPaths])
   const onPickImages = useCallback(() => void pickImages(), [pickImages])
+  const onCaptureImage = useCallback(() => void captureImage(), [captureImage])
   const onRemoveAttachment = useCallback((id: string) => void removeAttachment(id), [removeAttachment])
   const onRetryResume = useCallback(() => patchSessionTile(storedSessionId, { error: undefined }), [storedSessionId])
 
@@ -411,6 +413,7 @@ function TileChat({
           onAttachPastedText={composer.attachPastedText}
           onBranchInNewChat={actions.branchInNewChat}
           onCancel={actions.cancelRun}
+          onCaptureImage={onCaptureImage}
           onDeleteSelectedSession={noop}
           onDismissError={actions.dismissError}
           onEdit={actions.editMessage}

@@ -97,6 +97,7 @@ import {
 import { orderTilesByTree } from './session-tile-order'
 import { ackStoredSessionId, isMessagingCompletion, markSessionUnreadFinished } from './session-unread'
 import { migrateTranscriptTailsForProfile } from './transcript-tail-cache'
+import { turnLooksDone } from './turn-completion-gate'
 import { isBrowserWindow, isSecondaryWindow } from './windows'
 
 // ---------------------------------------------------------------------------
@@ -834,6 +835,18 @@ function lightUnreadCompletion(storedId: string, runtimeId?: string) {
   // FOCUSED, not selected: a session finishing in the tile the user is
   // watching is already seen, and a tile is never the primary selection.
   if (storedId === $focusedStoredSessionId.get() || isMessagingCompletion(storedId, profileHint)) {
+    return
+  }
+
+  // The busy→idle edge only proves the run stopped. A stopped turn is not
+  // always a FINISHED one: the user can cancel it, the provider can fail it,
+  // or it can end with a prompt row and no reply at all (restart, lost
+  // executor). Green for those sends the user to look at nothing — see
+  // turn-completion-gate.ts. A separately parked prompt is exempt: the amber
+  // needs-input dot outranks this one, so the green can never show anyway.
+  const settled = runtimeId ? $sessionStates.get()[runtimeId] : undefined
+
+  if (settled && !turnLooksDone({ interrupted: settled.interrupted, messages: settled.messages })) {
     return
   }
 

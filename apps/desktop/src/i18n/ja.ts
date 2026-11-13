@@ -2290,6 +2290,10 @@ export const jaOverrides = {
 
   composer: {
     message: 'メッセージ',
+    camera: 'カメラ',
+    usageSession: 'このセッション',
+    usageToday: '今日',
+    usageOffPeak: 'オフピーク料金',
     wakingProfile: profile => `${profile} を起動中…`,
     placeholderStarting: 'Hermes を起動中...',
     placeholderReconnecting: 'Hermes に再接続中…',

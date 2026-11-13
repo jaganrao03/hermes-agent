@@ -101,6 +101,21 @@ def _default_cli_version_matches_report(monkeypatch):
     )
 
 
+@pytest.fixture(autouse=True)
+def _stub_daemon_liveness(monkeypatch):
+    """Keep the daemon probe out of the MCP-handshake mocks.
+
+    ``_apply_daemon_liveness_guard`` calls ``cua_daemon_listening``, which
+    uses ``subprocess.run`` — not the ``Popen`` handle these tests mock. On a
+    Linux host with cua-driver units installed that reaches real subprocesses
+    and unpacks a MagicMock's empty ``communicate()`` result. The guard treats
+    an unknown probe as no finding, so stub it explicitly.
+    """
+    from tools.computer_use import cua_backend
+
+    monkeypatch.setattr(cua_backend, "cua_daemon_listening", lambda *args, **kwargs: None)
+
+
 # ── exit codes ─────────────────────────────────────────────────────────────
 
 

@@ -22,5 +22,28 @@
       "type": "image/png",
       "purpose": "any"
     }
+  ],
+  "shortcuts": [
+    {
+      "name": "New chat",
+      "short_name": "New",
+      "description": "Start a fresh conversation",
+      "url": "./",
+      "icons": [{ "src": "hermes-pwa-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Cron jobs",
+      "short_name": "Cron",
+      "description": "Scheduled runs and their last outcome",
+      "url": "./cron",
+      "icons": [{ "src": "hermes-pwa-192.png", "sizes": "192x192", "type": "image/png" }]
+    },
+    {
+      "name": "Command center",
+      "short_name": "Commands",
+      "description": "Search sessions, commands and settings",
+      "url": "./command-center",
+      "icons": [{ "src": "hermes-pwa-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
   ]
 }

@@ -251,6 +251,16 @@ _LOGIN_HTML_TEMPLATE = """\
     border-color: var(--midground);
     box-shadow: 0 0 0 1px var(--midground);
   }}
+  /* Touch: iOS zooms into any field under 16px and stays zoomed after the
+     keyboard closes, and a finger misses anything under 44px. The sign-in
+     screen is the first thing a new phone sees — give it the phone's lanes. */
+  @media (hover: none), (pointer: coarse) {{
+    .field-input,
+    .provider-btn {{
+      min-height: 2.75rem;
+      font-size: max(16px, 0.95rem);
+    }}
+  }}
   .form-error {{
     color: #ff6b6b;
     font-size: 0.82rem;

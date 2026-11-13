@@ -1,14 +1,6 @@
 import { ComposerPrimitive } from '@assistant-ui/react'
 import { useStore } from '@nanostores/react'
-import {
-  type ClipboardEvent,
-  type FormEvent,
-  type KeyboardEvent,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef
-} from 'react'
+import { type ClipboardEvent, type FormEvent, type KeyboardEvent, useCallback, useEffect, useMemo, useRef } from 'react'
 
 import { useTourMarker } from '@/app/chat/tour-marker'
 import type { GatewayRequester } from '@/app/contrib/types'
@@ -58,7 +50,7 @@ import {
 } from './composer-utils'
 import { ContextMenu } from './context-menu'
 import { COMPOSER_AREAS } from './contrib'
-import { ComposerControls } from './controls'
+import { CameraCaptureButton, ComposerControls } from './controls'
 import { ComposerDirectiveActions } from './directive-actions'
 import { COMPOSER_DROP_ACTIVE_CLASS, COMPOSER_DROP_FADE_CLASS } from './drop-affordance'
 import { composerEnterIntent } from './enter-intent'
@@ -152,6 +144,7 @@ export function ChatBar({
   onPickFiles,
   onPickFolders,
   onPickImages,
+  onCaptureImage,
   onRemoveAttachment,
   onSteer,
   onSteerHidden,
@@ -666,6 +659,35 @@ export function ChatBar({
     scheduleFlushEditorToDraft(event.currentTarget)
   }
 
+  // The break at a plain Enter is the browser's own contentEditable default,
+  // which is correct on desktop, in the native app and on keyboards that emit a
+  // real line break. A soft keyboard whose return key is wired to the IME's
+  // action key instead delivers the Enter *without* any insertion, so the
+  // keypress looks like "nothing happened" while the modifier shortcut still
+  // submits (reported on Brave/Android over the Webapp: Enter and Shift+Enter
+  // dead, Ctrl+Enter sends). Give the default a tick to land, then repair it
+  // only when the editor's DOM is untouched. Compare innerHTML rather than text:
+  // a native break lands as a <br> or a block, which adds no text-node content.
+  const ensureLineBreak = (editor: HTMLDivElement) => {
+    const before = editor.innerHTML
+
+    window.setTimeout(() => {
+      if (editorRef.current !== editor || !editor.isConnected) {
+        return
+      }
+
+      // Something landed — the break itself, or committed preedit text on the
+      // way in. Never insert a second one.
+      if (editor.innerHTML !== before) {
+        return
+      }
+
+      recordUndoPoint()
+      insertComposerContentsAtCaret(editor, '\n')
+      scheduleFlushEditorToDraft(editor)
+    }, 60)
+  }
+
   const handleEditorKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     // Self-heal a stale composition flag before the guard below reads it.
     // compositionend can be missed (focus jumps, input-source switches, or a
@@ -981,6 +1003,7 @@ export function ChatBar({
 
     if (enterIntent === 'newline') {
       event.stopPropagation()
+      ensureLineBreak(event.currentTarget)
 
       return
     }
@@ -1171,6 +1194,7 @@ export function ChatBar({
         aria-label={t.composer.message}
         {...composerTextEntryProps(touchPointer)}
         {...tapFocus}
+        aria-multiline="true"
         className={cn(
           'min-h-[1.625rem] min-h-(--composer-input-min-height) max-h-(--composer-input-max-height) cursor-text overflow-y-auto whitespace-pre-wrap break-words [overflow-wrap:anywhere] bg-transparent pb-1 pr-1 pt-1 leading-normal text-foreground outline-none disabled:cursor-not-allowed',
           '**:data-ref-text:cursor-default',
@@ -1185,6 +1209,7 @@ export function ChatBar({
         data-placeholder={placeholder}
         data-slot={RICH_INPUT_SLOT}
         dir={textDirection}
+        enterKeyHint="enter"
         onBeforeInput={handleEditorBeforeInput}
         onBlur={() => {
           // A composition never survives focus loss (Chromium commits the
@@ -1456,7 +1481,8 @@ export function ChatBar({
                   // track past the surface — and every `w-full` child (the fade,
                   // the input/controls row) laid out against that phantom width
                   // and got clipped by overflow-hidden, send button first.
-                  'group/composer-surface relative z-4 isolate grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr] overflow-hidden rounded-[inherit]', composerSurfaceRing,
+                  'group/composer-surface relative z-4 isolate grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_1fr] overflow-hidden rounded-[inherit]',
+                  composerSurfaceRing,
                   COMPOSER_DROP_FADE_CLASS,
                   dragActive && COMPOSER_DROP_ACTIVE_CLASS
                 )}
@@ -1508,6 +1534,9 @@ export function ChatBar({
                   <div className={cn('grid w-full', controlRowGridClass(singleColumn, stacked))}>
                     <div className="flex translate-y-[3px] items-start gap-(--composer-control-gap) self-start [grid-area:menu]">
                       {contextMenu}
+                      {onCaptureImage && touchPointer && !minimal ? (
+                        <CameraCaptureButton disabled={disabled} onCapture={onCaptureImage} />
+                      ) : null}
                       <ContribSlot area={COMPOSER_AREAS.leading} />
                     </div>
                     <div className="min-w-0 [grid-area:input]">{input}</div>
@@ -1557,7 +1586,12 @@ export function ChatBarFallback() {
       )}
       data-slot="composer-root"
     >
-      <div className={cn('composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit]', composerSurfaceRing)}>
+      <div
+        className={cn(
+          'composer-fallback-surface relative isolate h-(--composer-fallback-height) w-full rounded-[inherit]',
+          composerSurfaceRing
+        )}
+      >
         <div aria-hidden className={composerInputBacking} />
       </div>
     </div>

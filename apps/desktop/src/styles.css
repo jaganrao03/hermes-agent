@@ -78,7 +78,10 @@
     .progress-slide,
     .kanban-arc,
     .glyph-spinner__strip,
-    .decode-cursor-blink
+    .decode-cursor-blink,
+    /* The needs-input dot is the only endless animation in motion.css; it has
+       no business costing frames on a hidden window. */
+    [data-dot-state='needs-input']
   ),
 :root[data-renderer-animations-paused] .arc-border::before,
 :root[data-renderer-animations-paused]

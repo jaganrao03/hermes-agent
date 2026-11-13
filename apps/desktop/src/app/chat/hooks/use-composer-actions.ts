@@ -715,6 +715,35 @@ export function useComposerActions({
     }
   }, [attachImagePath, copy.attachImages, copy.imageAttachFailed, currentCwd, t.composer.images])
 
+  // Phone camera → one image chip. The browser host opens the OS camera through
+  // `capture=environment` on the hidden file input; a native picker has no
+  // viewfinder, so on Electron this degrades to the ordinary image picker.
+  const captureImage = useCallback(async () => {
+    let paths: string[]
+
+    try {
+      paths = await selectDesktopPaths({
+        title: copy.attachImages,
+        defaultPath: currentCwd || undefined,
+        capture: 'environment',
+        filters: [
+          {
+            name: t.composer.images,
+            extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'tiff']
+          }
+        ]
+      })
+    } catch (err) {
+      notifyError(err, copy.imageAttachFailed)
+
+      return
+    }
+
+    for (const path of paths || []) {
+      await attachImagePath(path)
+    }
+  }, [attachImagePath, copy.attachImages, copy.imageAttachFailed, currentCwd, t.composer.images])
+
   const pasteClipboardImage = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
       try {
@@ -905,7 +934,14 @@ export function useComposerActions({
 
       return attached
     },
-    [attachContextFilePath, attachContextFolderPath, attachImageBlob, attachImagePath, copy.dropFiles, copy.dropFilesMore]
+    [
+      attachContextFilePath,
+      attachContextFolderPath,
+      attachImageBlob,
+      attachImagePath,
+      copy.dropFiles,
+      copy.dropFilesMore
+    ]
   )
 
   const removeAttachment = useCallback(
@@ -938,6 +974,7 @@ export function useComposerActions({
     attachImageBlob,
     attachImagePath,
     attachPastedText,
+    captureImage,
     insertContextPathInlineRef,
     pasteClipboardImage,
     pickContextPaths,

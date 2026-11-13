@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import math
 import os
+import random
 import sqlite3
 import threading
 import time
@@ -311,19 +312,30 @@ def adopt_claimed_execution(execution_id: str) -> Optional[dict[str, Any]]:
     """
     pid = os.getpid()
     process_started_at = _process_start_time(pid)
-    now = _hermes_now().isoformat()
-    with _transaction() as conn:
-        cur = conn.execute(
-            """UPDATE executions
-               SET process_id=?, pid=?, process_started_at=?,
-                   status='running', started_at=?, handoff_pending=0,
-                   handoff_started_at=NULL
-               WHERE id=? AND status='claimed' AND handoff_pending=1""",
-            (_PROCESS_ID, pid, process_started_at, now, execution_id),
-        )
-        if cur.rowcount != 1:
-            return None
-        record = _fetch(conn, execution_id)
+    # busy_timeout can expire under concurrent ledger writers. Retry only this
+    # pre-side-effect CAS, on a fresh transaction after rollback/close. Never
+    # retry the payload or acknowledge before the ownership commit succeeds.
+    record: Optional[dict[str, Any]] = None
+    for attempt in range(3):
+        try:
+            now = _hermes_now().isoformat()
+            with _transaction() as conn:
+                cur = conn.execute(
+                    """UPDATE executions
+                       SET process_id=?, pid=?, process_started_at=?,
+                           status='running', started_at=?, handoff_pending=0,
+                           handoff_started_at=NULL
+                       WHERE id=? AND status='claimed' AND handoff_pending=1""",
+                    (_PROCESS_ID, pid, process_started_at, now, execution_id),
+                )
+                if cur.rowcount != 1:
+                    return None
+                record = _fetch(conn, execution_id)
+            break
+        except sqlite3.OperationalError as exc:
+            if str(exc).lower() not in ("database is locked", "database is busy") or attempt == 2:
+                raise
+            time.sleep(random.uniform(0.020, 0.150))
     _emit_execution_state(record)
     return record
 

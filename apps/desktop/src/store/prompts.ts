@@ -228,6 +228,12 @@ export interface VaultCodeRequest extends KeyedPrompt {
 const vaultCode = keyedPromptStore<VaultCodeRequest>()
 
 export const $approvalRequests = approval.$all
+/** How many approvals are waiting across every session — the app-icon badge
+ *  count. A queue per session means `$approvalRequests` only says WHICH sessions
+ *  are blocked, not how many prompts are stacked behind each one. */
+export const $pendingApprovalCount = computed($approvalQueues, queues =>
+  Object.values(queues).reduce((total, queue) => total + queue.length, 0)
+)
 export const $approvalRequest = computed(
   [approval.$all, $activeSessionId],
   (all, activeId) => all[keyFor(activeId)] ?? null

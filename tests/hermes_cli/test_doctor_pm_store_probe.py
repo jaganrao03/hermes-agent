@@ -20,10 +20,15 @@ from pm.store import current_target, tree_digest
 
 @pytest.fixture
 def tool_store(tmp_path, monkeypatch):
-    rg = shutil.which("rg")
-    assert rg is not None, "this executable parity test requires ripgrep"
+    # Use a disposable executable, not the host's `rg`: a developer shell puts
+    # PM's tool store (~/.hermes/tools/...) on PATH, and reading that binary
+    # would trip the real-home guard. The fixture only needs rg's --version
+    # contract; a script gives that deterministically and stays in tmp_path.
+    rg = tmp_path / "rg"
+    rg.write_text("#!/bin/sh\nprintf 'ripgrep 14.1.0\\n'\n", encoding="utf-8")
+    rg.chmod(0o755)
     version_output = subprocess.run(
-        [rg, "--version"], capture_output=True, text=True, check=True, timeout=10,
+        [str(rg), "--version"], capture_output=True, text=True, check=True, timeout=10,
     ).stdout
     version = version_output.splitlines()[0].split()[1]
     home = tmp_path / "home"

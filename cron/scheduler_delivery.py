@@ -433,12 +433,19 @@ def _home_env_lookup(env_var: str, suffix: str = "", *, strip: bool = False) -> 
     job-owning profile's secret scope (run_one_job sets it), so this resolves the OWNING profile's
     value, not the host environ. ``os.getenv`` only if the scope module is missing."""
     try:
-        from agent.secret_scope import get_secret
+        from agent.secret_scope import UnscopedSecretError, get_secret
     except Exception:
         get_secret = None  # type: ignore
+        UnscopedSecretError = ()  # type: ignore  # empty tuple: never matches in except
 
     def read(name: str) -> str:
-        value = (get_secret(name, "") or "") if get_secret is not None else os.getenv(name, "")
+        # No profile scope active (tick-level platform probing): treat as unset instead of
+        # raising a traceback per platform per tick. Never fall back to host os.environ here,
+        # that would leak one profile's value into another in a multiplex gateway.
+        try:
+            value = (get_secret(name, "") or "") if get_secret is not None else os.getenv(name, "")
+        except UnscopedSecretError:
+            value = ""
         return value.strip() if strip else value
 
     value = read(env_var + suffix)
@@ -747,12 +754,38 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
         run_id = job.get("execution_id")
         if not run_id:
             run_id = job.setdefault("_bot_chat_run_id", uuid.uuid4().hex)
-        key = hashlib.sha256(json.dumps(
-            [str(source_home), job_id, str(run_id), str(home)],
-            ensure_ascii=False, separators=(",", ":"),
-        ).encode("utf-8")).hexdigest()
+        category = "diagnostic" if for_failure else "result"
+        payload_hash = hashlib.sha256(message.encode("utf-8")).hexdigest()
+
+        def make_key(parts):
+            return hashlib.sha256(json.dumps(
+                parts, ensure_ascii=False, separators=(",", ":"),
+            ).encode("utf-8")).hexdigest()
+
+        key = make_key([
+            str(source_home), job_id, str(run_id), str(home), category, payload_hash,
+        ])
+
+        def matches_payload(candidate):
+            return (candidate["message"] == message
+                    and candidate.get("notification_category", "result") == category)
+
+        rekeyed = False
+
+        def rekey_once():
+            nonlocal key, rekeyed
+            if rekeyed:
+                raise ValueError("delivery receipt mismatch persisted after one re-key")
+            key = hashlib.sha256(f"{key}:{category}:{payload_hash}".encode()).hexdigest()
+            rekeyed = True
+
         # Read BEFORE discovery: the previous owner may have exited after accepting.
         receipt = read_delivery_result(home, key)
+        if receipt is not None and not matches_payload(receipt):
+            rekey_once()
+            receipt = read_delivery_result(home, key)
+            if receipt is not None and not matches_payload(receipt):
+                raise ValueError("delivery id already belongs to a different payload")
         target = f"bot-chat:{profile_label}"
         if receipt is None and suppress_notification:
             # Suppression is a durable disposition, not a send: the failure notice is booked
@@ -775,9 +808,14 @@ def _deliver_to_bot_chat(job: dict, content: str, profile: str, *,
             # A failure notice rides as ``diagnostic`` so the target's reply stays muted.
             receipt = deliver_to_live_owner(home, owner, message, delivery_id=key,
                 **({"notification_category": "diagnostic"} if for_failure else {}))
-        if (receipt["message"] != message
-                or receipt.get("notification_category", "result") != ("diagnostic" if for_failure else "result")):
-            raise ValueError("delivery id already belongs to a different payload")
+        if receipt is not None and not matches_payload(receipt):
+            rekey_once()
+            receipt = read_delivery_result(home, key)
+            if receipt is None:
+                receipt = deliver_to_live_owner(home, owner, message, delivery_id=key,
+                    **({"notification_category": category} if for_failure else {}))
+            if not matches_payload(receipt):
+                raise ValueError("delivery id already belongs to a different payload")
         status = receipt["status"]
         receipts = job.setdefault("_bot_chat_delivery_receipts", {})
         receipts[target] = {"status": status, "delivery_id": key}

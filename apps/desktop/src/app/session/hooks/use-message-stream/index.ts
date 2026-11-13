@@ -36,11 +36,13 @@ import { turnDoneNotificationBody } from '@/lib/turn-done-notification-body'
 import type { ScopedServerRequest } from '@/store/gateway'
 import { dispatchNativeNotification } from '@/store/native-notifications'
 import { isDiskFullErrorMessage, notifyError } from '@/store/notifications'
+import { hasParkedUserPrompt } from '@/store/parked-prompts'
 import { broadcastSessionsChanged } from '@/store/session-sync'
 import { registerStreamDeltaFlush } from '@/store/stream-delta-flush'
 import { upsertSubagent } from '@/store/subagents'
 import { $todosBySession, setSessionTodos } from '@/store/todos'
 import { broadcastTranscriptChanged } from '@/store/transcript-sync'
+import { turnLooksDone } from '@/store/turn-completion-gate'
 
 import type { ClientSessionState } from '../../../types'
 
@@ -1174,12 +1176,29 @@ export function useMessageStream({
         void hydrateFromStoredSession(3, completedState.storedSessionId, sessionId)
       }
 
-      dispatchNativeNotification({
-        body: turnDoneNotificationBody(text, translateNow('notifications.native.turnDoneBody')),
-        kind: 'turnDone',
-        sessionId,
-        title: translateNow('notifications.native.turnDoneTitle')
-      })
+      // "Hermes finished" is only true when the turn actually produced
+      // something to read. A cancelled run, a failure card, or a prompt row
+      // with no reply behind it ends on the same busy→idle edge but has
+      // nothing for the user to open — announcing it is a false green light.
+      // A parked clarify/approval is the other half of the rule: the turn
+      // stops because it NEEDS the user, and that prompt already fired its own
+      // notification when it arrived.
+      const awaitingUser = hasParkedUserPrompt(sessionId)
+
+      if (
+        turnLooksDone({
+          interrupted: completedState.interrupted,
+          messages: completedState.messages,
+          needsInput: awaitingUser
+        })
+      ) {
+        dispatchNativeNotification({
+          body: turnDoneNotificationBody(text, translateNow('notifications.native.turnDoneBody')),
+          kind: 'turnDone',
+          sessionId,
+          title: translateNow('notifications.native.turnDoneTitle')
+        })
+      }
     },
     [hydrateFromStoredSession, scheduleSessionsRefresh, updateSessionState]
   )

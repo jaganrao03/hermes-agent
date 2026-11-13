@@ -2547,6 +2547,10 @@ export const ruOverrides = {
   },
   composer: {
     message: 'Сообщение',
+    camera: 'Камера',
+    usageSession: 'Эта сессия',
+    usageToday: 'Сегодня',
+    usageOffPeak: 'Тарифы вне пиковых часов',
     wakingProfile: profile => `Пробуждаем ${profile}…`,
     placeholderStarting: 'Запуск Hermes...',
     placeholderReconnecting: 'Переподключение к Hermes…',

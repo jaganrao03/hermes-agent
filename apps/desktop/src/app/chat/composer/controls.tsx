@@ -6,7 +6,7 @@ import { Tip, TipKeybindLabel } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { triggerHaptic } from '@/lib/haptics'
 import { hostHas } from '@/lib/host-capabilities'
-import { Ear, EarOff, iconSize, Layers3, Loader2, Square } from '@/lib/icons'
+import { Camera, Ear, EarOff, iconSize, Layers3, Loader2, Square } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 import { recordAction } from '@/store/desktop-metrics'
 import { $hudMode, closeHud, resetHudLayout } from '@/store/hud'
@@ -438,6 +438,35 @@ function WakeWordButton({ disabled, pausedForVoice = false }: { disabled: boolea
         variant="ghost"
       >
         {wake.listening && !pausedForVoice ? <Ear className={iconSize.sm} /> : <EarOff className={iconSize.sm} />}
+      </Button>
+    </Tip>
+  )
+}
+
+// Phone-only: one tap from the composer to a photo. Lives beside the "+" menu
+// (the leading cluster) rather than in the control row, which is already at its
+// width budget on a phone. Hidden everywhere else — a desktop picker has no
+// viewfinder.
+export function CameraCaptureButton({ disabled, onCapture }: { disabled: boolean; onCapture: () => void }) {
+  const { t } = useI18n()
+  const label = t.composer.camera
+
+  return (
+    <Tip label={label} placement="control">
+      <Button
+        aria-label={label}
+        className={GHOST_ICON_BTN}
+        disabled={disabled}
+        onClick={() => {
+          triggerHaptic('open')
+          onCapture()
+        }}
+        onMouseDown={keepEditorFocus}
+        size="icon"
+        type="button"
+        variant="ghost"
+      >
+        <Camera className={iconSize.sm} />
       </Button>
     </Tip>
   )

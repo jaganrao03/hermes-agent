@@ -1,21 +1,34 @@
-"""Fail-closed classification for order-submission calls through Hermes MCP."""
+"""Fail-closed classification for order-submission calls through Hermes MCP.
+
+SINGLE SOURCE OF TRUTH (2026-11-12): this file is deployed BYTE-IDENTICAL to both app trees —
+  ~/.hermes/hermes-agent/tools/mcp_tool_buy_guard.py   (the buy handoff / oneshot CLI tree)
+  ~/dev/hermes-agent-fork/tools/mcp_tool_buy_guard.py  (the running gateway tree)
+They previously held two different rules, so which BUY was permitted depended on which process asked.
+Edit ONE copy, copy it over the other, and run ~/.hermes/scripts/tests/test-buy-guard-single-rule.py.
+"""
 
 import re
 from typing import Any, Optional
 
 from tools.registry import tool_error
 
+AGENTIC_ACCOUNT = "997604194"
+
+
+def _is_robinhood(server_name: Any) -> bool:
+    """True only for the Robinhood MCP servers ('robinhood', 'rh', 'robin-hood', ...)."""
+    server = server_name.casefold().replace("-", "_") if isinstance(server_name, str) else ""
+    return "robinhood" in server or "rh" in set(server.split("_"))
+
 
 def buy_submission_error(server_name: str, tool_name: str, arguments: Any) -> Optional[str]:
     """Return an error before transport for BUY-capable or ambiguous order routes.
 
-    This boundary deliberately denies BUYs rather than trying to infer approval from prompts,
-    tool metadata, or caller labels. Sells remain available when their side is unambiguous.
+    Exactly ONE buy route is allowed: place_equity_order on a Robinhood MCP server, and — when the call
+    states the account — only Jagan's Agentic account (997604194). Crypto, option, "advanced", generic
+    and ambiguous order routes stay denied on every server. Sells and read-only order calls pass.
+    This does not replace the downstream rulebook, buy guard, signal ledger, broker or approval checks.
     """
-    server = server_name.casefold().replace("-", "_") if isinstance(server_name, str) else ""
-    server_tokens = set(server.split("_"))
-    if "robinhood" not in server and "rh" not in server_tokens:
-        return None
     if (
         not isinstance(tool_name, str)
         or not tool_name
@@ -50,7 +63,11 @@ def buy_submission_error(server_name: str, tool_name: str, arguments: Any) -> Op
         if not isinstance(side, str) or side.casefold() not in {"buy", "sell"}:
             return tool_error("BUY guard blocks ambiguous order side")
         if side.casefold() == "buy":
-            return tool_error("BUY guard blocks BUY order submissions through Hermes MCP")
+            if not (_is_robinhood(server_name) and name == "place_equity_order"):
+                return tool_error("BUY guard blocks BUY order submissions through Hermes MCP")
+            stated = arguments.get("account_number")
+            if stated not in (None, "") and str(stated) != AGENTIC_ACCOUNT:
+                return tool_error("BUY guard blocks BUY on a Robinhood account other than the Agentic account")
 
     if name == "place_option_order":
         legs = arguments.get("legs")

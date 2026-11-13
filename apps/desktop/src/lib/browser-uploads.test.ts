@@ -46,9 +46,9 @@ describe('browser image paste size', () => {
   it('stages an image of exactly the limit', async () => {
     seedWebappSession('served-token')
 
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ path: '/srv/hermes/cache/images/upload.png' }), { status: 200 })
-    )
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ path: '/srv/hermes/cache/images/upload.png' }), { status: 200 }))
 
     vi.stubGlobal('fetch', fetchMock)
     expect(installBrowserDesktopBridge()).toBe(true)
@@ -63,7 +63,9 @@ describe('browser image paste size', () => {
 describe('browser file stage size', () => {
   // A picked or dropped file over the upload limit gets the server's 413 "Upload request is too large",
   // which doesn't say what the limit is, and a refused image pick used to show nothing at all.
-  const tooLarge = (name: string, type: string) => new File([new Uint8Array(BROWSER_UPLOAD_MAX_BYTES + 1)], name, { type })
+  const tooLarge = (name: string, type: string) =>
+    new File([new Uint8Array(BROWSER_UPLOAD_MAX_BYTES + 1)], name, { type })
+
   const limitMessage = 'The file is larger than 16 MiB, the largest file the browser can attach.'
 
   async function installBrowser() {
@@ -158,5 +160,65 @@ describe('browser file stage size', () => {
 
     expect(warning?.message).toMatch(/^Could not attach a+/)
     expect(warning?.message).toContain(limitMessage)
+  })
+})
+
+// The phone affordance: a camera button must open the OS camera, not the gallery.
+// What makes that true is the hidden input's `capture` attribute — the attribute
+// is the whole contract, so it is what the test pins.
+describe('composer camera capture', () => {
+  async function mountComposer() {
+    seedWebappSession('served-token')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 200 }))
+    )
+    expect(installBrowserDesktopBridge()).toBe(true)
+    $connection.set(await window.hermesDesktop.getConnection('owner'))
+
+    return renderHook(() =>
+      useComposerActions({ activeSessionId: null, currentCwd: '/workspace', requestGateway: vi.fn() })
+    )
+  }
+
+  it('opens the OS camera with an image-only single-shot picker', async () => {
+    const { result } = await mountComposer()
+
+    let opened: HTMLInputElement | null = null
+
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (this: HTMLInputElement) {
+      opened = this
+      // Cancel behaves like a dismissed viewfinder: no file, nothing to attach.
+      this.dispatchEvent(new Event('cancel'))
+    })
+
+    await act(async () => {
+      await result.current.captureImage()
+    })
+
+    expect(opened).not.toBeNull()
+    expect(opened!.getAttribute('capture')).toBe('environment')
+    expect(opened!.accept).toBe('image/*')
+    expect(opened!.multiple).toBe(false)
+    expect($notifications.get()).toHaveLength(0)
+  })
+
+  it('leaves the plain image picker untouched', async () => {
+    const { result } = await mountComposer()
+
+    let opened: HTMLInputElement | null = null
+
+    vi.spyOn(HTMLInputElement.prototype, 'click').mockImplementation(function (this: HTMLInputElement) {
+      opened = this
+      this.dispatchEvent(new Event('cancel'))
+    })
+
+    await act(async () => {
+      await result.current.pickImages()
+    })
+
+    expect(opened).not.toBeNull()
+    expect(opened!.hasAttribute('capture')).toBe(false)
+    expect(opened!.accept).toBe('.png,.jpg,.jpeg,.gif,.webp,.bmp,.tiff')
   })
 })

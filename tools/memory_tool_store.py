@@ -189,6 +189,7 @@ class MemoryStore:
                  memory_enabled: bool = True, user_profile_enabled: bool = True):
         self.memory_entries: list[str] = []
         self.user_entries: list[str] = []
+        self._shared_entries: dict[str, list[str]] = {"memory": [], "user": []}
         self.memory_char_limit, self.user_char_limit = memory_char_limit, user_char_limit
         self.memory_enabled, self.user_profile_enabled = memory_enabled, user_profile_enabled
         self._system_prompt_snapshot: dict[str, str] = {"memory": "", "user": ""}
@@ -227,12 +228,15 @@ class MemoryStore:
         (dropping them silently would hide the attack)."""
         from tools.threat_patterns import scan_for_threats
 
-        def _sanitize(entry, filename):
+        def _sanitize(entry, filename, *, shared=False):
             # Strict scope, same as writes; empty / already-blocked entries pass through.
             findings = scan_for_threats(entry, scope="strict") if entry and not entry.startswith("[BLOCKED:") else None
             if not findings:
                 return entry
             logger.warning("Memory entry from %s blocked at load time: %s", filename, ", ".join(findings))
+            if shared:
+                return (f"[BLOCKED: shared {filename} entry contained threat pattern(s): {', '.join(findings)}. "
+                        f"Removed from system prompt. The shared base is read-only here; fix it in the default profile.]")
             return (f"[BLOCKED: {filename} entry contained threat pattern(s): {', '.join(findings)}. "
                     f"Removed from system prompt; use memory(action=remove, target='{_store_target(filename)}') "
                     f"to delete the original.]")
@@ -245,6 +249,9 @@ class MemoryStore:
             # Deduplicate (order-preserving, first occurrence wins).
             entries = list(dict.fromkeys(self._read_file(path)))
             self._set_entries(target, entries)
+            shared_path = self._shared_path_for(target)
+            shared_entries = list(dict.fromkeys(self._read_file(shared_path))) if shared_path else []
+            self._shared_entries[target] = shared_entries
             # External writers (MCP bridges, hand edits) can exceed the cap; the limit only fires on
             # add/replace, so the oversized block would silently ride in the prompt while every later
             # add is refused with no visible cause (#10877). Warn; never truncate a user's memories.
@@ -252,7 +259,14 @@ class MemoryStore:
                 logger.warning("%s exceeds its char limit on load: %d/%d chars. Entries stay loaded; "
                                "further additions are blocked until it is back under the limit.",
                                path.name, count, limit)
-            self._system_prompt_snapshot[target] = self._render_block(target, [_sanitize(e, path.name) for e in entries])
+            sanitized = ([_sanitize(e, shared_path.name, shared=True) for e in shared_entries]
+                         if shared_path else [])
+            sanitized += [_sanitize(e, path.name) for e in entries]
+            self._system_prompt_snapshot[target] = self._render_block(
+                target, list(dict.fromkeys(sanitized)),
+                local_count=self._char_count(target),
+                shared_count=len(ENTRY_DELIMITER.join(shared_entries)),
+            )
 
     @staticmethod
     @contextmanager
@@ -301,6 +315,14 @@ class MemoryStore:
     def _path_for(target: str) -> Path:
         from tools import memory_tool  # get_memory_dir is monkeypatched there
         return memory_tool.get_memory_dir() / ("USER.md" if target == "user" else "MEMORY.md")
+
+    @staticmethod
+    def _shared_path_for(target: str) -> Optional[Path]:
+        from tools import memory_tool  # get_shared_memory_dir is monkeypatched there
+        shared_dir = memory_tool.get_shared_memory_dir()
+        if not shared_dir:
+            return None
+        return shared_dir / ("USER.md" if target == "user" else "MEMORY.md")
 
     def _entries_for(self, target: str) -> list[str]:
         return self.user_entries if target == "user" else self.memory_entries
@@ -651,6 +673,10 @@ class MemoryStore:
         it, preserving the prefix cache); None if empty."""
         return self._system_prompt_snapshot.get(target, "") or None
 
+    def shared_entries(self, target: str) -> list[str]:
+        """Read-only entries inherited from ``memory.shared_home`` at load time."""
+        return list(self._shared_entries.get(target, []))
+
     def _success_response(self, target: str, message: str | None = None, **extra) -> dict[str, Any]:
         """TERMINAL and WITHOUT the entries list: echoing entries invites the model to
         "find more to fix" and re-issue the same ops. A successful write resets the
@@ -666,13 +692,20 @@ class MemoryStore:
                 **extra,
                 "note": "Write saved. This update is complete — do not repeat it."}
 
-    def _render_block(self, target: str, entries: list[str]) -> str:
+    def _render_block(self, target: str, entries: list[str], *,
+                      local_count: Optional[int] = None, shared_count: int = 0) -> str:
         """System prompt block: header + usage indicator + entries ("" when empty)."""
         if not entries:
             return ""
         content, sep = ENTRY_DELIMITER.join(entries), "═" * 46
         title = MEMORY_BLOCK_HEADERS["user" if target == "user" else "memory"]
-        return f"{sep}\n{title} [{self._usage_pct(target, len(content))}]\n{sep}\n{content}"
+        if local_count is None:
+            usage = self._usage_pct(target, len(content))
+        else:
+            usage = self._usage_pct(target, local_count)
+            if shared_count:
+                usage += f" + {shared_count:,} shared read-only"
+        return f"{sep}\n{title} [{usage}]\n{sep}\n{content}"
 
     @staticmethod
     def _read_raw_checked(path: Path) -> tuple[str, bool]:

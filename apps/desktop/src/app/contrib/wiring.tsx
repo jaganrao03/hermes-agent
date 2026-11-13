@@ -1125,6 +1125,7 @@ export function ContribWiring({ children }: { children: ReactNode }) {
     onPickFiles: () => void composer.pickContextPaths('file'),
     onPickFolders: () => void composer.pickContextPaths('folder'),
     onPickImages: () => void composer.pickImages(),
+    onCaptureImage: () => void composer.captureImage(),
     onReload: reloadFromMessage,
     onRemoveAttachment: id => void composer.removeAttachment(id),
     onRestoreToMessage: restoreToMessage,
@@ -1410,7 +1411,8 @@ export function ContribWiring({ children }: { children: ReactNode }) {
       <NotificationStack />
 
       {/* Backs confirm() from @/store/confirm — renders only while one is open. */}
-      <ConfirmHost /><PreviewSigninsBoot />
+      <ConfirmHost />
+      <PreviewSigninsBoot />
 
       {/* Send Diagnostics consent/upload dialog — driven by $sendDiagnostics
           (error card action); renders nothing until requested. */}

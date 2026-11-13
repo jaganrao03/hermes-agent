@@ -121,16 +121,15 @@ def test_deliver_message_carries_cron_attribution(tmp_path, monkeypatch):
     assert "the payload" in captured["message"]
 
 
-def test_failure_notice_reaches_the_owner_as_a_diagnostic(tmp_path, monkeypatch):
-    """A delivered ``for_failure`` notice keeps ``notification_category="diagnostic"`` through
-    the owner transport (R1/R2 minor: the category was accepted but dropped)."""
+def test_delivery_id_includes_category_and_payload(tmp_path, monkeypatch):
+    """A run's diagnostic and result, or changed result payload, need distinct receipts."""
     from tools import bot_live_delivery as mailbox
 
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     seen = []
 
     def fake_deliver(home, owner, message, *, delivery_id, notification_category="result"):
-        seen.append(notification_category)
+        seen.append((notification_category, delivery_id, message))
         return {"status": "settled", "message": message, "delivery_id": delivery_id,
                 "notification_category": notification_category}
 
@@ -138,9 +137,44 @@ def test_failure_notice_reaches_the_owner_as_a_diagnostic(tmp_path, monkeypatch)
     monkeypatch.setattr(mailbox, "deliver_to_live_owner", fake_deliver)
     monkeypatch.setattr("gateway.warning_notifications.warning_notifications_enabled", lambda *a, **k: True)
     job = {"id": "j1", "name": "n", "execution_id": "r1"}
-    assert _deliver_to_bot_chat(job, "boom", "", for_failure=True) is None
-    assert _deliver_to_bot_chat(dict(job, execution_id="r2"), "ok", "") is None
-    assert seen == ["diagnostic", "result"]
+    assert _deliver_to_bot_chat(job, "same", "", for_failure=True) is None
+    assert _deliver_to_bot_chat(dict(job), "same", "") is None
+    assert _deliver_to_bot_chat(dict(job), "changed", "") is None
+    assert [category for category, _, _ in seen] == ["diagnostic", "result", "result"]
+    assert len({delivery_id for _, delivery_id, _ in seen}) == 3
+    assert seen[0][1] != seen[1][1]  # category differs, even when message is identical
+    assert seen[1][1] != seen[2][1]  # payload differs within the same run/category
+
+
+def test_mismatched_existing_receipt_is_rekeyed_once(tmp_path, monkeypatch):
+    """A stale/colliding receipt is retried once under a payload-specific id."""
+    from tools import bot_live_delivery as mailbox
+
+    monkeypatch.setenv("HERMES_HOME", str(tmp_path))
+    reads, deliveries = [], []
+
+    def fake_read(home, delivery_id):
+        reads.append(delivery_id)
+        if len(reads) == 1:
+            return {"status": "settled", "message": "old payload",
+                    "delivery_id": delivery_id, "notification_category": "result"}
+        return None
+
+    def fake_deliver(home, owner, message, *, delivery_id, notification_category="result"):
+        deliveries.append((delivery_id, message, notification_category))
+        return {"status": "settled", "message": message, "delivery_id": delivery_id,
+                "notification_category": notification_category}
+
+    monkeypatch.setattr(mailbox, "read_delivery_result", fake_read)
+    monkeypatch.setattr(mailbox, "find_canonical_live_owner", lambda home: {"session_id": "local-bot"})
+    monkeypatch.setattr(mailbox, "deliver_to_live_owner", fake_deliver)
+    assert _deliver_to_bot_chat({"id": "j1", "name": "n", "execution_id": "r1"},
+                                "new payload", "") is None
+    assert len(reads) == 2 and reads[0] != reads[1]
+    assert len(deliveries) == 1
+    assert deliveries[0][0] == reads[1]
+    assert deliveries[0][2] == "result"
+    assert "new payload" in deliveries[0][1]
 
 
 def test_deliver_without_authority_is_parked_not_a_second_writer(tmp_path, monkeypatch):

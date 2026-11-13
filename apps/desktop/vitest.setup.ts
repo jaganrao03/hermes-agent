@@ -76,10 +76,10 @@ if ('Element' in globalThis) {
 // 5s proved insufficient on saturated runners (2026-08-31: gateway-settings,
 // messaging, session-unread-tile, toolset-config-panel each tripped a
 // waitFor(mock-called) deadline on runs whose only common factor was load —
-// including a plugins-only commit on main). 12s mirrors the same reasoning
-// as the 15s testTimeout above it while still finishing below it, so a
-// genuinely hung await still surfaces as this assertion, not a test timeout.
-configure({ asyncUtilTimeout: 12_000 })
+// including a plugins-only commit on main). 20s matches the wider budget the
+// 45s testTimeout gives a starved first test while still finishing below it,
+// so a genuinely hung await still surfaces as this assertion, not a timeout.
+configure({ asyncUtilTimeout: 20_000 })
 
 // Resolved stream URLs outlive a mount on purpose; a test file reusing one path must not
 // inherit the previous case's source.

@@ -166,6 +166,10 @@ export const zhHantOverrides = {
   sidebar: zhHantChrome.sidebar,
   composer: {
     ...zhHantChat.composer,
+    camera: '相機',
+    usageSession: '本次工作階段',
+    usageToday: '今天',
+    usageOffPeak: '離峰費率',
     redirect: '重新導向目前的執行',
     queueLostNote: '重新啟動期間該回合已遺失',
     restoreImageDraft: '還原圖片草稿',

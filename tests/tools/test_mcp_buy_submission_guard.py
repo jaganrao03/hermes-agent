@@ -69,6 +69,50 @@ def test_clear_sell_and_read_calls_are_not_blocked_by_buy_guard(tool, arguments)
     acquire.assert_called_once()
 
 
+def test_agentic_equity_buy_passes_pre_transport_guard():
+    args = {
+        "account_number": "997604194",
+        "side": "buy",
+        "symbol": "TEST",
+        "type": "market",
+    }
+    with patch.object(handlers, "_acquire_call_server", return_value=(None, '{"error":"offline"}')) as acquire:
+        raw = handlers._make_tool_handler("robinhood", "place_equity_order", 1.0)(args)
+
+    assert json.loads(raw) == {"error": "offline"}
+    acquire.assert_called_once()
+
+
+@pytest.mark.parametrize(
+    "tool,args",
+    [
+        ("place_equity_order", {"account_number": "476413208", "side": "buy"}),
+        ("place_equity_order", {"account_number": 997604194, "side": "buy"}),
+        ("place_advanced_order", {"account_number": "997604194", "side": "buy"}),
+        ("place_crypto_order", {"account_number": "997604194", "side": "buy"}),
+        ("place_equity_order", {"account_number": "997604194"}),
+        ("place_equity_order", {"account_number": ["997604194"], "side": "buy"}),
+        ("place_option_order", {"account_number": "997604194", "side": "buy"}),
+    ],
+)
+def test_non_agentic_or_ambiguous_buy_routes_stay_blocked(tool, args):
+    with patch.object(handlers, "_acquire_call_server") as acquire:
+        raw = handlers._make_tool_handler("robinhood", tool, 1.0)(args)
+
+    assert "error" in json.loads(raw)
+    acquire.assert_not_called()
+
+
+@pytest.mark.parametrize("server", ["robinhood_mcp", "rh", "robinhood_agentic"])
+def test_buy_on_server_alias_stays_blocked_even_for_agentic_account(server):
+    args = {"account_number": "997604194", "side": "buy", "symbol": "TEST", "type": "market"}
+    with patch.object(handlers, "_acquire_call_server") as acquire:
+        raw = handlers._make_tool_handler(server, "place_equity_order", 1.0)(args)
+
+    assert "error" in json.loads(raw)
+    acquire.assert_not_called()
+
+
 @pytest.mark.parametrize("server", ["robinhood_mcp", "rh", "robinhood_agentic"])
 def test_aliased_trading_server_still_gets_buy_guard(server):
     with patch.object(handlers, "_acquire_call_server") as acquire:

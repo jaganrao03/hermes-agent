@@ -42,6 +42,7 @@ export type ChatActions = Pick<
   | 'onPickFiles'
   | 'onPickFolders'
   | 'onPickImages'
+  | 'onCaptureImage'
   | 'onReload'
   | 'onRemoveAttachment'
   | 'onRestoreToMessage'

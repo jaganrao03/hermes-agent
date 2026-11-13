@@ -19,12 +19,16 @@ const reactUi: TestProjectConfiguration = {
     // inherited NODE_ENV=production from a desktop launch).
     env: { NODE_ENV: 'development' },
     // The first test in each file pays jsdom env init + full module transform,
-    // which can exceed vitest's 5000ms default under CI/load. 15s gives the
-    // cold start headroom without masking genuinely hung tests. Hooks pay the
+    // which can exceed vitest's 5000ms default under CI/load. Hooks pay the
     // same cold cost when a beforeEach does `vi.resetModules()` + `await
-    // import(...)` (65 files); one timed out at 10s on CI (#120318).
-    testTimeout: 15_000,
-    hookTimeout: 30_000
+    // import(...)` (65 files).
+    //
+    // 45s, not 15s: a full 32-worker run of this project is 1500+ files on one
+    // machine, and the first test in a file can wait minutes of CPU behind
+    // other workers' module transforms — 15s aborted healthy tests that pass
+    // alone in ~1s. The same headroom applies to hooks for the same reason.
+    testTimeout: 45_000,
+    hookTimeout: 60_000
   }
 }
 

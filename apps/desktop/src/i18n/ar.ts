@@ -115,6 +115,10 @@ export const arOverrides = {
   sidebar: arChrome.sidebar,
   composer: {
     ...arChat.composer,
+    camera: 'كاميرا',
+    usageSession: 'هذه الجلسة',
+    usageToday: 'اليوم',
+    usageOffPeak: 'أسعار خارج أوقات الذروة',
     redirect: 'إعادة توجيه التشغيل الحالي',
     queueLostNote: 'فُقد الدور أثناء إعادة التشغيل',
     restoreImageDraft: 'استعادة مسودة الصورة',

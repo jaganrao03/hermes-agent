@@ -70,6 +70,7 @@ import {
   useComposerScope,
   useComposerSurfaceId
 } from './composer/scope'
+import { HeaderUsageChip } from './header-usage-chip'
 import { useHistoryWindow } from './history-window'
 import { type DroppedFile, partitionDroppedFiles } from './hooks/use-composer-actions'
 import { useFileDropZone } from './hooks/use-file-drop-zone'
@@ -112,6 +113,8 @@ interface ChatViewProps extends Omit<React.ComponentProps<'div'>, 'onSubmit'> {
   onPickFiles: () => void
   onPickFolders: () => void
   onPickImages: () => void
+  /** Phone-only: OS camera capture for the composer's leading cluster. */
+  onCaptureImage?: () => void
   onRemoveAttachment: (id: string) => void
   onSteer: (text: string, mode?: 'interrupt' | 'steer') => Promise<boolean> | boolean
   onSteerHidden?: (text: string) => Promise<boolean> | boolean
@@ -195,6 +198,7 @@ function ChatHeader({
           <TitleMenuTrigger>{title}</TitleMenuTrigger>
         </SessionActionsMenu>
       </div>
+      <HeaderUsageChip session={activeStoredSession} />
     </header>
   )
 }
@@ -504,6 +508,7 @@ const ChatViewContent = memo(function ChatViewContent({
   onPickFiles,
   onPickFolders,
   onPickImages,
+  onCaptureImage,
   onRemoveAttachment,
   onSteer,
   onSteerHidden,
@@ -850,6 +855,7 @@ const ChatViewContent = memo(function ChatViewContent({
                 onAttachImageBlob={onAttachImageBlob}
                 onAttachPastedText={onAttachPastedText}
                 onCancel={onCancel}
+                onCaptureImage={onCaptureImage}
                 onPasteClipboardImage={onPasteClipboardImage}
                 onPickFiles={onPickFiles}
                 onPickFolders={onPickFolders}

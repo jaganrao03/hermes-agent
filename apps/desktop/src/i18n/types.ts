@@ -3025,6 +3025,10 @@ export interface Translations extends NoticeTranslations {
     files: string
     folder: string
     images: string
+    camera: string
+    usageSession: string
+    usageToday: string
+    usageOffPeak: string
     pasteImage: string
     url: string
     promptSnippets: string

@@ -1,0 +1,149 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOTION PACK — the small, repeated moments that make the app feel alive.
+   ═══════════════════════════════════════════════════════════════════════════
+
+   Rules this file follows, so it stays cheap and never fights the layout:
+
+   1. Only `opacity`, `scale` and `box-shadow` animate. Nothing here triggers
+      layout, so a 100-message thread costs the same as an empty one.
+   2. Nothing runs forever unless it MEANS something ("still working", "needs
+      your answer"). Decorative loops are the first thing that makes an app
+      feel cheap.
+   3. Message bubbles deliberately have no mount animation here: the transcript
+      virtualizes, so a CSS entrance would replay on every scroll. Bubbles keep
+      the one-shot Web Animations entrance in lib/use-enter-animation.ts.
+   4. The global `prefers-reduced-motion` block in styles.css already flattens
+      every animation below — no per-rule opt-in needed.
+
+   The two dot rules are also the honest half of the completion cue: green
+   means "finished, something is waiting for you", amber means "your answer is
+   blocking this turn". See store/turn-completion-gate.ts for the rule that
+   decides when green is allowed to appear at all.
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Keyframes ─────────────────────────────────────────────────────────── */
+
+@keyframes hermes-fade-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes hermes-pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.82);
+  }
+
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* One soft halo that expands and fades — a "here" wave, not a blinking light. */
+@keyframes hermes-arrive-ring {
+  0% {
+    box-shadow: 0 0 0 0 oklch(from var(--ui-success) l c h / 45%);
+  }
+
+  100% {
+    box-shadow: 0 0 0 6px oklch(from var(--ui-success) l c h / 0%);
+  }
+}
+
+/* Amber = the one state that needs the user. It breathes so the eye lands on
+   it, slow enough not to nag. */
+@keyframes hermes-needs-you {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 oklch(0.769 0.188 70.08 / 55%);
+  }
+
+  50% {
+    box-shadow: 0 0 0 4px oklch(0.769 0.188 70.08 / 0%);
+  }
+}
+
+@keyframes hermes-nudge {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+
+  25% {
+    transform: translateX(-2px);
+  }
+
+  75% {
+    transform: translateX(2px);
+  }
+}
+
+/* ── Message tail: actions + duration settle in instead of snapping ─────── */
+
+[data-slot='aui_msg-actions']:not([hidden]):not([data-approval-activity-only]) {
+  animation: hermes-fade-rise 150ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+[data-slot='aui_turn-duration'] {
+  animation: hermes-fade-rise 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Failure card: a short side-nudge reads as "this needs your attention"
+      without the cartoonish shake a bigger amplitude gives. ──────────────── */
+
+.aui-error-card[role='alert'] {
+  animation: hermes-nudge 260ms ease-in-out both;
+}
+
+/* ── Status dots ───────────────────────────────────────────────────────── */
+
+/* Finished while you were elsewhere: pop in, then one halo. Played once per
+   appearance — the dot is re-keyed by state, so this is the moment the turn
+   lands, not a loop. */
+[data-dot-state='unread'] {
+  animation:
+    hermes-pop 240ms cubic-bezier(0.22, 1, 0.36, 1) both,
+    hermes-arrive-ring 900ms ease-out 120ms both;
+}
+
+/* A clarify/approval is parked: keep pulsing while it waits. */
+[data-dot-state='needs-input'] {
+  animation: hermes-needs-you 1.9s ease-in-out infinite;
+}
+
+/* ── Composer: buttons answer the press ────────────────────────────────── */
+
+[data-slot='composer-bounds'] button {
+  transition:
+    scale 120ms ease-out,
+    opacity 120ms ease-out;
+}
+
+[data-slot='composer-bounds'] button:not(:disabled):active {
+  scale: 0.94;
+}
+
+/* ── Sidebar rows: a hair of travel under the pointer, so the list feels
+      physical without moving anything enough to re-aim a click. Uses the
+      standalone `translate` property, NOT `transform`: row reordering hands
+      `transform` to the drag library, and sharing it would fight the drag. */
+
+.row-hover {
+  transition: translate 140ms ease-out;
+}
+
+.row-hover:hover {
+  translate: 1px 0;
+}

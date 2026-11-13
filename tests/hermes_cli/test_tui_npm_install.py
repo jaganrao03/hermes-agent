@@ -133,7 +133,9 @@ def test_runtime_node_comes_from_pm_without_legacy_repair(tmp_path, monkeypatch)
     import pm
     from pm.package import Runner
 
-    node = shutil.which("node")
+    node = tmp_path / "node-fixture"
+    node.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    node.chmod(0o755)
     managed = tmp_path / "bin/node"
     managed.parent.mkdir()
     managed.symlink_to(node)

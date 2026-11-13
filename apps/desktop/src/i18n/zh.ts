@@ -3210,6 +3210,10 @@ export const zhOverrides = {
 
   composer: {
     message: '消息',
+    camera: '相机',
+    usageSession: '本次会话',
+    usageToday: '今天',
+    usageOffPeak: '非高峰费率',
     wakingProfile: profile => `正在唤醒 ${profile}…`,
     placeholderStarting: '正在启动 Hermes…',
     placeholderReconnecting: '正在重新连接 Hermes…',

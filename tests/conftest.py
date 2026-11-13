@@ -1120,6 +1120,10 @@ def _processes_with_hermes_home_under(roots) -> list[int]:
     import psutil
 
     resolved = [Path(r).resolve() for r in roots if r]
+    # Check the raw path before resolving: another process may legitimately
+    # name the developer's real HERMES_HOME, and resolving it would make the
+    # home-I/O guard refuse a read that this cleanup never needed to perform.
+    lexical_roots = tuple(os.path.normcase(os.path.abspath(os.fspath(r))) for r in resolved)
     me = os.getpid()
     found = []
     for proc in psutil.process_iter():
@@ -1130,6 +1134,9 @@ def _processes_with_hermes_home_under(roots) -> list[int]:
         except (psutil.Error, OSError):
             continue
         if not home:
+            continue
+        lexical = os.path.normcase(os.path.abspath(home))
+        if not any(lexical == root or lexical.startswith(root + os.sep) for root in lexical_roots):
             continue
         try:
             path = Path(home).resolve()

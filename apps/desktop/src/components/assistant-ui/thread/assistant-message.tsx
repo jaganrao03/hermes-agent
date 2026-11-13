@@ -245,8 +245,6 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
   // re-renders the markdown part and the tiny status leaves — not the footer,
   // the preview block, or this root.
   const hasVisibleText = useAuiState(s => contentHasVisibleText(s.message.content))
-  const isRunning = useAuiState(s => s.message.status?.type === 'running')
-  const isLastMessage = useAuiState(s => s.thread.messages.at(-1)?.id === s.message.id)
 
   // The gateway's own turn time for the latest user message, in Unix seconds.
   // Only `timelineTimestamp` counts: createdAt falls back to *now* for a
@@ -377,7 +375,7 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
                   messageId={messageId}
                   onBranchInNewChat={onBranchInNewChat}
                 />
-                {isLastMessage && !isInterim && !isRunning && (
+                {!isInterim && (
                   <FollowUpSuggestions
                     fallbackSessionId={followUpFallbackSessionId}
                     freshAfter={latestUserTimestamp}

@@ -150,11 +150,17 @@ export function SessionStatusDot({ storedSessionId, session, branchStem, classNa
         // Rendered even with no color to paint: an empty dot of the same size
         // keeps every row's title on one left edge, so a session finishing
         // can't shift the list under the pointer.
-        <span aria-hidden="true" className={variant.className} style={color ? { backgroundColor: color } : undefined} />
+        <span
+          aria-hidden="true"
+          className={variant.className}
+          data-dot-state={dotState}
+          style={color ? { backgroundColor: color } : undefined}
+        />
       ) : (
         <span
           aria-label={variant.ariaLabel?.(r)}
           className={variant.className}
+          data-dot-state={dotState}
           role={variant.role}
           title={variant.title?.(r)}
         />
