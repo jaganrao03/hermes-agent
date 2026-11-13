@@ -30,6 +30,10 @@ import {
 import type { AgentProfileRoute } from '@/store/profile'
 import { sessionPinId } from '@/store/session'
 import { $sessionDotStateById, hasLiveTurn } from '@/store/session-dot-state'
+import {
+  $sessionMultiSelectMode,
+  toggleSessionMultiSelect
+} from '@/store/session-multi-select'
 
 import { SIDEBAR_FOCUS_VISIBLE, SidebarDateDivider, SidebarSectionMeta } from './chrome'
 import { GatewayProfileGroups } from './gateway-groups'
@@ -592,11 +596,13 @@ export function SidebarSessionsSection({
         className={contentClassName}
         dividerAction={dividerAction}
         dividerToggle={dividerToggle}
+        multiSelectMode={$sessionMultiSelectMode.get()}
         onArchiveSession={onArchiveSession}
         onBranchSession={onBranchSession}
         onDeleteSession={onDeleteSession}
         onResumeSession={onResumeSession}
         onTogglePin={onTogglePin}
+        onToggleSessionMultiSelect={$sessionMultiSelectMode.get() ? toggleSessionMultiSelect : undefined}
         onToggleUnread={onToggleUnread}
         pinned={pinned}
         rows={visibleRows}

@@ -5,6 +5,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import type * as React from 'react'
 import { type FC, useEffect, useRef } from 'react'
 
+import { Button } from '@/components/ui/button'
 import type { SessionInfo } from '@/hermes'
 import { useI18n } from '@/i18n'
 import { type SidebarListRow } from '@/lib/session-date-groups'
@@ -12,6 +13,14 @@ import { sessionBucketLabel } from '@/lib/time'
 import { cn } from '@/lib/utils'
 import { sessionPinId } from '@/store/session'
 import { $sessionListDensity } from '@/store/session-list-density'
+import {
+  $sessionMultiSelectIds,
+  $sessionMultiSelectMode,
+  clearSessionMultiSelect,
+  getSessionMultiSelectIds,
+  hasSessionMultiSelect,
+  toggleSessionMultiSelect
+} from '@/store/session-multi-select'
 
 import { SidebarDateDivider } from './chrome'
 import { SidebarSessionRow } from './session-row'
@@ -22,11 +31,14 @@ interface SessionRowCommonProps {
   card?: boolean
   isPinned: boolean
   isSelected: boolean
+  multiSelectMode: boolean
+  multiSelected: boolean
   unread: boolean
   onArchive: () => void
   onBranch?: () => void
   onDelete: () => void
   onPin: () => void
+  onToggleSessionMultiSelect?: (sessionId: string) => void
   onToggleUnread: () => void
   onResume: () => void
   reorderable?: boolean
@@ -47,11 +59,13 @@ export interface VirtualSessionListProps {
     open: (key: string) => boolean
   }
   rows: SidebarListRow[]
+  multiSelectMode?: boolean
   onArchiveSession: (sessionId: string) => void
   onBranchSession?: (sessionId: string, profile?: string) => void
   onDeleteSession: (sessionId: string) => void
   onResumeSession: (sessionId: string, session?: SessionInfo) => void
   onTogglePin: (sessionId: string) => void
+  onToggleSessionMultiSelect?: (sessionId: string) => void
   onToggleUnread: (sessionId: string) => void
   pinned: boolean
   showProfileTags?: boolean
@@ -71,6 +85,7 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
   className,
   dividerAction,
   dividerToggle,
+  multiSelectMode = false,
   rows: listRows,
   onArchiveSession,
   onBranchSession,
@@ -164,10 +179,13 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
       card,
       isPinned: pinned,
       isSelected: session.id === activeSessionId,
+      multiSelectMode: $sessionMultiSelectMode.get(),
+      multiSelected: $sessionMultiSelectIds.get().has(session.id),
       onArchive: () => onArchiveSession(session.id),
       onBranch: onBranchSession ? () => onBranchSession(session.id, session.profile) : undefined,
       onDelete: () => onDeleteSession(session.id),
       onPin: () => onTogglePin(sessionPinId(session)),
+      onToggleSessionMultiSelect: $sessionMultiSelectMode.get() ? () => toggleSessionMultiSelect(session.id) : undefined,
       onToggleUnread: () => onToggleUnread(session.id),
       onResume: () => onResumeSession(session.id, session),
       reorderable,
@@ -214,6 +232,42 @@ export const VirtualSessionList: FC<VirtualSessionListProps> = ({
       ref={scrollerRef}
     >
       <div className="relative" style={{ height: `${totalSize}px` }}>
+        {multiSelectMode && hasSessionMultiSelect() ? (
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-(--ui-stroke-tertiary) px-3 py-1.5">
+            <span className="text-xs text-(--ui-text-tertiary)">
+              Selected {getSessionMultiSelectIds().length} sessions
+            </span>
+            <div className="flex shrink-0 gap-1">
+              <Button
+                aria-label="Clear selection"
+                className="!text-xs"
+                onClick={() => clearSessionMultiSelect()}
+                size="sm"
+                variant="ghost"
+              >
+                Clear
+              </Button>
+              <Button
+                aria-label="Delete selected"
+                className="!text-xs"
+                onClick={() => getSessionMultiSelectIds().forEach(id => onDeleteSession(id))}
+                size="sm"
+                variant="destructive"
+              >
+                Delete ({getSessionMultiSelectIds().length})
+              </Button>
+              <Button
+                aria-label="Archive selected"
+                className="!text-xs"
+                onClick={() => getSessionMultiSelectIds().forEach(id => onArchiveSession(id))}
+                size="sm"
+                variant="outline"
+              >
+                Archive
+              </Button>
+            </div>
+          </div>
+        ) : null}
         {rows}
       </div>
     </div>
