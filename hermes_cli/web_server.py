@@ -495,6 +495,13 @@ async def _token_auth_seam(request: Request, call_next):
         return await token_auth_middleware(request, call_next)
 
 
+@app.middleware("http")
+async def _hardening_headers_seam(request: Request, call_next):
+    """Registered last = outermost: nosniff / no-referrer / DENY on /login and /api/*, even on auth rejections."""
+    from hermes_cli.dashboard_auth.security_headers import hardening_headers_middleware
+    return await hardening_headers_middleware(request, call_next)
+
+
 _DASHBOARD_HEALTH_WINDOW_SECONDS = 300.0
 
 

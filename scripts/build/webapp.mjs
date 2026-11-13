@@ -6,6 +6,7 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { productOutput, withProduct, workspaceTool } from './frontend-common.mjs'
 import { buildInputs, outputIntact, recordProduct, sourceHash } from './freshness.mjs'
+import { checkWebappBudget } from './check-webapp-budget.mjs'
 import { pruneStaleAssets } from './prune-webapp-assets.mjs'
 
 // Vite's build manifest (apps/desktop/vite.config.ts names it too): the files a generation emitted.
@@ -98,6 +99,9 @@ export async function buildWebapp({ source, workspace, out }) {
     const keep = process.env.HERMES_PRUNE_RETAINED_CHUNKS === '1' ? new Set() : new Set(retained)
     const { removed } = pruneStaleAssets({ product, keep })
     if (removed.length) console.log(`webapp: pruned ${removed.length} stale asset(s): ${removed.join(', ')}`)
+    const violations = checkWebappBudget({ product })
+    for (const violation of violations) console.error(`webapp budget: ${violation}`)
+    if (violations.length) throw new Error(`Webapp build is over its size budget (${violations.length} violation(s))`)
     recordProduct({ source, product: 'webapp', out: product, inputs })
   }, { source })
   return { out, index: join(out, 'index.html') }

@@ -95,10 +95,18 @@ _LOGIN_HTML_TEMPLATE = """\
     background-attachment: fixed;
   }}
 
-  /* Layout: vertically center on tall screens, top-anchor on short. */
+  /* Layout: vertically center on tall screens, top-anchor on short.
+     `safe center` falls back to start when the card overflows, so the
+     overflow stays scrollable; the plain `center` line is the fallback for
+     browsers that reject `safe` (they drop the second declaration). */
   body {{
     display: grid;
-    place-items: center;
+    justify-items: center;
+    align-content: center;
+    align-content: safe center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    overflow-y: auto;
     padding: clamp(1.5rem, 6vh, 6rem) 1.25rem;
   }}
 
@@ -286,6 +294,19 @@ _LOGIN_HTML_TEMPLATE = """\
     background: var(--hairline-strong);
     vertical-align: middle;
     margin: 0 0.6em 0.2em;
+  }}
+
+  /* Short viewports (landscape phone, small window): top-anchor + tighten
+     so the whole form and submit button sit above the fold. Placed last so it
+     wins the cascade over the base .card/footer rules. */
+  @media (max-height: 700px) {{
+    body {{
+      align-content: start;
+      padding: 1rem;
+    }}
+    .brand {{ margin-bottom: 1rem; }}
+    .card {{ padding: 1.25rem 1.25rem 1.1rem; }}
+    footer {{ margin-top: 1rem; }}
   }}
 
   /* Selection — DS uses midground bg + background text. */

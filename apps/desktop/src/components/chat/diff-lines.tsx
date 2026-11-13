@@ -1,9 +1,10 @@
 'use client'
 
 import * as React from 'react'
-import type { BundledLanguage, ShikiTransformer, ThemedToken } from 'shiki'
+import type { ShikiTransformer, ThemedToken } from 'shiki'
 
 import { chunkLines, type LineChunk, useFixedRowWindow } from '@/components/chat/fixed-row-window'
+import { highlightToTokens } from '@/components/chat/shiki-engine'
 import { exceedsHighlightBudget, SHIKI_THEME } from '@/components/chat/shiki-highlighter'
 import { ErrorBoundary } from '@/components/error-boundary'
 import { useSeenOnce } from '@/hooks/use-seen-once'
@@ -384,13 +385,12 @@ function TokenizedDiffBody({
     let cancelled = false
 
     setTokens(null)
-    // Dynamic import so the multi-MB shiki chunk stays off the cold-start
-    // path — this effect only runs once a highlightable diff is on screen.
-    void import('shiki')
-      .then(({ codeToTokens }) => codeToTokens(code, { lang: language as BundledLanguage, theme }))
+    // The shared core engine loads lazily: this effect only runs once a
+    // highlightable diff is on screen.
+    void highlightToTokens(code, language, theme)
       .then(result => {
         if (!cancelled) {
-          setTokens(result.tokens)
+          setTokens(result)
         }
       })
       .catch(() => {

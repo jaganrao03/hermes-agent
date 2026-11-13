@@ -11,7 +11,7 @@
 import type * as assistantUiModule from '@assistant-ui/react'
 import { AssistantRuntimeProvider, type ThreadMessage } from '@assistant-ui/react'
 import { act, cleanup, render } from '@testing-library/react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { useRuntimeMessageRepository } from '@/app/chat/runtime-repository'
 import type * as messageReactionsModule from '@/components/assistant-ui/thread/use-message-reactions'
@@ -58,16 +58,6 @@ vi.mock('@assistant-ui/react', async importActual => {
 
 stubThreadEnvironment()
 stubThreadViewportSize()
-
-// Markdown surfaces get the code plugin (all of shiki) from a one-shot async
-// import (`useCodePlugin`), and every surface mounted before it lands
-// re-renders once to swap it in. Cold, that import can take longer than the
-// settle loop below, which put that one-time re-render inside the chunk window
-// (0.1 per settled row). Load the module before the test so the hook's own
-// import resolves while rows are still settling.
-beforeAll(async () => {
-  await import('@streamdown/code')
-})
 
 beforeEach(() => {
   rootRenders.clear()

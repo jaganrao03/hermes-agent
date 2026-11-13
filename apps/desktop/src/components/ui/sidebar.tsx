@@ -15,6 +15,16 @@ import { useI18n } from '@/i18n'
 import { PanelLeftIcon } from '@/lib/icons'
 import { cn } from '@/lib/utils'
 
+export const MAIN_CONTENT_ID = 'main-content'
+
+
+const SKIP_LINK_CLASS = cn(
+  'sr-only focus-visible:not-sr-only focus-visible:fixed focus-visible:top-2 focus-visible:left-2 focus-visible:z-[100]',
+  'focus-visible:rounded-md focus-visible:bg-background focus-visible:px-3 focus-visible:py-2 focus-visible:text-sm',
+  'focus-visible:text-foreground focus-visible:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2',
+  'focus-visible:outline-ring'
+)
+
 const SIDEBAR_COOKIE_NAME = 'sidebar_state'
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
 const SIDEBAR_WIDTH = '16rem'
@@ -121,6 +131,24 @@ function SidebarProvider({
           }
           {...props}
         >
+          {/* First focusable element: keyboard users jump past the chrome. Hidden with the
+              sr-only clip pattern (never display:none) until focused. */}
+          <a
+            className={SKIP_LINK_CLASS}
+            data-slot="skip-link"
+            href={`#${MAIN_CONTENT_ID}`}
+            onClick={event => {
+              // A bare hash would navigate a hash-routed shell; move focus directly.
+              const target = document.getElementById(MAIN_CONTENT_ID)
+
+              if (target) {
+                event.preventDefault()
+                target.focus()
+              }
+            }}
+          >
+            Skip to conversation
+          </a>
           {children}
         </div>
       </TooltipProvider>
@@ -288,6 +316,7 @@ function SidebarInset({ className, ...props }: React.ComponentProps<'main'>) {
         className
       )}
       data-slot="sidebar-inset"
+      tabIndex={-1}
       {...props}
     />
   )

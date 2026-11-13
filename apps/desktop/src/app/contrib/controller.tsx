@@ -34,7 +34,7 @@ import {
   toggleTargetZoneTabStrip
 } from '@/components/pane-shell/tree/store'
 import { $workspaceOwnerLabels, workspaceOwnerTitle } from '@/components/pane-shell/workspace-scope'
-import { SidebarProvider } from '@/components/ui/sidebar'
+import { MAIN_CONTENT_ID, SidebarProvider } from '@/components/ui/sidebar'
 import { discoverBundledPlugins } from '@/contrib/plugins'
 import { Slot } from '@/contrib/react/slot'
 import { registry } from '@/contrib/registry'
@@ -836,7 +836,13 @@ export function ContribController() {
           // painted by <body> is the only thing between the page and the
           // vibrancy material.
           data-contrib-shell=""
+          id={MAIN_CONTENT_ID}
+          role="main"
           style={{ '--titlebar-height': '0px' } as CSSProperties}
+          // Focus target for the sidebar's skip link: the shell is the one
+          // element guaranteed to exist once per window, so the id can never
+          // collide the way a per-session chat surface would in split view.
+          tabIndex={-1}
         >
           <LayoutTreeRoot titlebar />
 

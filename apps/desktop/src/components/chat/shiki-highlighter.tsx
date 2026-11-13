@@ -35,8 +35,8 @@ export { SHIKI_COLOR_REPLACEMENTS, SHIKI_THEME } from '@/components/chat/shiki-c
  * bar it floats over. 16px clears macOS's lane with the control's outer box
  * and puts the 12px icon (same size as the log-tail copy control) 20px out.
  *
- * The heavy lifting lives in the lazy `shiki-block` chunk (full bundle so all
- * `bundledLanguages` work; theme switches follow the document `color-scheme`
+ * The heavy lifting lives in the lazy `shiki-block` chunk (a curated grammar set on
+ * the JS regex engine; theme switches follow the document `color-scheme`
  * via `defaultColor="light-dark()"`), and its output is cached by content so
  * warm-session switches never re-tokenize unchanged blocks (#95595).
  */
@@ -69,7 +69,7 @@ function importShikiBlock() {
   })
 }
 
-// shiki (and through it the multi-MB grammar/theme/wasm bundle) is the
+// shiki (and through it the curated grammar/theme set) is the
 // heaviest dependency in the renderer. `shiki-block.tsx` is its only static
 // importer, so this lazy() is the single seam that keeps shiki out of the
 // entry chunk — it loads on the first highlighted code block, not at boot.

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * scratch on the main thread. The content-keyed cache must make a remount of
  * an unchanged block a cache hit — ZERO highlighter calls.
  *
- * shiki itself is mocked (jsdom cannot run the oniguruma wasm engine); the
+ * shiki itself is mocked (the real grammars are too heavy for jsdom); the
  * mock counts `codeToHtml` invocations, which is the cost we are guarding.
  */
 const { codeToHtml } = vi.hoisted(() => ({
@@ -18,18 +18,27 @@ const { codeToHtml } = vi.hoisted(() => ({
   })
 }))
 
-vi.mock('shiki', () => ({
-  bundledLanguages: { typescript: 'typescript-loader', text: 'text-loader' },
-  getSingletonHighlighter: vi.fn(async () => ({
-    codeToHtml: (code: string) => codeToHtml(code),
-    getLoadedLanguages: () => ['text', 'typescript'],
-    loadLanguage: vi.fn(async () => undefined)
-  }))
+vi.mock('shiki/core', () => ({
+  createHighlighterCore: vi.fn(async () => {
+    const loaded = new Set<string>()
+
+    return {
+      codeToHtml: (code: string) => codeToHtml(code),
+      getLoadedLanguages: () => [...loaded],
+      loadLanguage: vi.fn(async () => {
+        loaded.add('typescript')
+      })
+    }
+  })
 }))
 
-vi.mock('shiki/engine/oniguruma', () => ({
-  createOnigurumaEngine: vi.fn(() => ({}) as never)
+vi.mock('shiki/engine/javascript', () => ({
+  createJavaScriptRegexEngine: vi.fn(() => ({}) as never)
 }))
+
+vi.mock('shiki/langs/typescript.mjs', () => ({ default: [] }))
+vi.mock('shiki/themes/github-dark-dimmed.mjs', () => ({ default: {} }))
+vi.mock('shiki/themes/github-light-default.mjs', () => ({ default: {} }))
 
 import CachedShikiBlock from '@/components/chat/shiki-block'
 import { highlightCache } from '@/components/chat/shiki-highlight-cache'
@@ -126,5 +135,13 @@ describe('CachedShikiBlock (warm-switch perf guard)', () => {
 
     // Second mount tries the highlighter again instead of serving stale HTML.
     expect(codeToHtml).toHaveBeenCalledTimes(2)
+  })
+
+  it('renders an unknown language as plain text without touching the highlighter', async () => {
+    render(<CachedShikiBlock code={'<b>hi</b>\n'} language="brainfuck" />)
+    await waitForHighlighted()
+
+    expect(codeToHtml).not.toHaveBeenCalled()
+    expect(screen.getByTestId('shiki-container').innerHTML).toContain('&lt;b&gt;hi&lt;/b&gt;')
   })
 })

@@ -210,6 +210,16 @@ class TestProviderListFlag:
         assert login.status_code == 200
         assert '<form class="provider-form" data-provider="testpw"' in login.text
         assert "/auth/password-login" in login.text
+        assert login.headers["x-content-type-options"] == "nosniff"
+        assert login.headers["referrer-policy"] == "no-referrer"
+        assert login.headers["x-frame-options"] == "DENY"
+        # Inline style/script on the page: a CSP here would break sign-in.
+        assert "content-security-policy" not in login.headers
+
+        api = gated_app.get("/api/auth/providers")
+        assert api.headers["x-content-type-options"] == "nosniff"
+        assert api.headers["referrer-policy"] == "no-referrer"
+        assert api.headers["x-frame-options"] == "DENY"
 
 
     def test_oauth_provider_reports_false(self):
@@ -457,6 +467,21 @@ def test_client_ip_uses_asgi_peer_not_forwarded_header(peer: tuple[str, int] | N
 
 
 class TestLoginPageRender:
+
+    def test_short_viewport_rules_keep_form_reachable(self):
+        clear_providers()
+        register_provider(StubAuthProvider())
+        try:
+            html = render_login_html()
+            assert "min-height: 100dvh;" in html
+            assert "min-height: 100vh;" in html
+            assert "align-content: safe center;" in html
+            assert "overflow-y: auto;" in html
+            short = html[html.index("@media (max-height: 700px)"):]
+            assert "align-content: start;" in short
+            assert "padding: 1rem;" in short
+        finally:
+            clear_providers()
 
     def test_oauth_only_page_stays_script_free(self):
         clear_providers()
