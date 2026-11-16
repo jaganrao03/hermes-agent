@@ -21,7 +21,7 @@ const PLUGIN = 'api/plugins/pwa-push'
  * the worker entirely.
  */
 function pushUrl(path: string): string {
-  return new URL(`${PLUGIN}/${path}`, document.baseURI).href
+  return new URL(`${PLUGIN}/${path.replace(/^\/+/, '')}`, document.baseURI).href
 }
 
 /**
@@ -80,6 +80,7 @@ function clientId(): string {
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(pushUrl(path), {
     headers: { 'content-type': 'application/json' },
+    credentials: 'include',
     ...init
   })
 

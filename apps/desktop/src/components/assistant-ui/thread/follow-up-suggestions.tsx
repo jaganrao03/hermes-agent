@@ -72,6 +72,8 @@ export const parseNextPromptSuggestions = (value: unknown, freshAfter?: number):
 /** Cached-row poll interval, and how long we wait for one before generating. */
 const POLL_MS = 1_000
 const POLL_ATTEMPTS = 10
+// A pending lease can remain valid for 90 seconds in the plugin store.
+const PENDING_POLL_ATTEMPTS = 90
 /** Backoff between generation attempts; nothing is ever surfaced about them. */
 const RETRY_DELAYS = [2_000, 6_000, 15_000]
 
@@ -110,7 +112,7 @@ const useSettledThreadContext = (): ContextMessage[] | null => {
       }
     }
 
-    return JSON.stringify(exchanges.slice(-2).flat())
+    return JSON.stringify(exchanges.slice(-4).flat())
   })
 
   return useMemo(() => (json === null ? null : (JSON.parse(json) as ContextMessage[])), [json])
@@ -203,14 +205,30 @@ const FollowUpSuggestionsBody: FC<FollowUpSuggestionsProps> = ({ fallbackSession
       return pending ? 'pending' : 'miss'
     }
 
-    const run = async (): Promise<void> => {
-      // 1. Wait out the in-process hook write for a finished turn.
-      for (let attempt = 0; attempt < POLL_ATTEMPTS; attempt += 1) {
-        if ((await readCached()) !== 'miss') {return}
+    const pollCached = async (): Promise<boolean> => {
+      let misses = 0
+      let pendingDeadline: number | undefined
 
-        if (!current) {return}
+      while (current) {
+        const status = await readCached()
+        if (!current || status === 'settled') {return true}
+        if (status === 'pending') {
+          misses = 0
+          pendingDeadline ??= Date.now() + PENDING_POLL_ATTEMPTS * POLL_MS
+        } else {
+          misses += 1
+          if (misses >= POLL_ATTEMPTS) {break}
+        }
+        if (pendingDeadline !== undefined && Date.now() >= pendingDeadline) {break}
         await sleep(POLL_MS)
       }
+
+      return !current
+    }
+
+    const run = async (): Promise<void> => {
+      // 1. Wait for a hook write, including an in-flight generation lease.
+      if (await pollCached()) {return}
 
       // 2. Nothing stored: ask for suggestions for this transcript (an opened
       //    historical session, or a profile whose hook never ran).
@@ -230,6 +248,7 @@ const FollowUpSuggestionsBody: FC<FollowUpSuggestionsProps> = ({ fallbackSession
           if (!current) {return}
 
           if (settle(result)) {return}
+          if (result.status === 'pending' && fresh(result.timestamp) && await pollCached()) {return}
         } catch {
           // Silent: the chips simply do not appear.
         }

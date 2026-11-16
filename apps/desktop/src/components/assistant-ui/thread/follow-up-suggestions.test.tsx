@@ -53,6 +53,21 @@ describe('FollowUpSuggestions', () => {
     { role: 'assistant' as const, content: 'Fixed the null check in parser.py.' }
   ]
 
+  it('clears previous chips when a completed turn returns a fresh empty result', async () => {
+    vi.useFakeTimers()
+    const { rerender } = render(<FollowUpSuggestions freshAfter={1} messages={messages} sessionId="session-1" />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    expect(screen.getByRole('button', { name: 'Show an example' })).toBeTruthy()
+
+    vi.mocked(pluginRest).mockResolvedValue({ status: 'empty', timestamp: 200, suggestions: [] } as never)
+    const completed = [...messages, { role: 'user' as const, content: 'Finish the parser' },
+      { role: 'assistant' as const, content: 'The parser is complete and verified.' }]
+    rerender(<FollowUpSuggestions freshAfter={200} messages={completed} sessionId="session-1" />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(100) })
+    expect(screen.queryByRole('button', { name: 'Show an example' })).toBeNull()
+    expect(screen.queryByRole('button')).toBeNull()
+  })
+
   it('renders nothing at all when the request fails', async () => {
     vi.useFakeTimers()
     vi.mocked(pluginRest).mockRejectedValue(new Error('HTTP 503'))
@@ -176,6 +191,70 @@ describe('FollowUpSuggestions', () => {
 
     await act(async () => { await vi.advanceTimersByTimeAsync(1_000) })
     expect(chips()).toHaveLength(3)
+  })
+
+  it('waits for a pending generation and displays its eventual suggestions', async () => {
+    vi.useFakeTimers()
+    let reads = 0
+    vi.mocked(pluginRest).mockImplementation(async (_plugin: string, path: string) => {
+      if (path === '/generate') {throw new Error('Unexpected duplicate generation')}
+      reads += 1
+      return (reads <= 12
+        ? { status: 'pending', timestamp: 101, suggestions: [] }
+        : { status: 'ready', suggestions: [{ text: 'Check the fix', timestamp: 102 }] }) as never
+    })
+
+    render(<FollowUpSuggestions freshAfter={100} messages={messages} sessionId="session-1" />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+
+    expect(screen.getByRole('button', { name: 'Check the fix' })).toBeTruthy()
+    expect(vi.mocked(pluginRest).mock.calls.every(([, path]) => path !== '/generate')).toBe(true)
+  })
+
+  it('polls an existing generation when the generate endpoint returns pending', async () => {
+    vi.useFakeTimers()
+    let generating = false
+    let reads = 0
+    vi.mocked(pluginRest).mockImplementation(async (_plugin: string, path: string) => {
+      if (path === '/generate') {
+        generating = true
+        return { status: 'pending', timestamp: 101, suggestions: [] } as never
+      }
+      if (!generating) {return { status: 'none', suggestions: [] } as never}
+      reads += 1
+      return (reads <= 3
+        ? { status: 'pending', timestamp: 101, suggestions: [] }
+        : { status: 'ready', suggestions: [{ text: 'Inspect result', timestamp: 102 }] }) as never
+    })
+
+    render(<FollowUpSuggestions freshAfter={100} messages={messages} sessionId="session-1" />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(20_000) })
+    expect(screen.getByRole('button', { name: 'Inspect result' })).toBeTruthy()
+    expect(vi.mocked(pluginRest).mock.calls.filter(([, path]) => path === '/generate')).toHaveLength(1)
+  })
+
+  it('stops polling a pending generation when the component unmounts', async () => {
+    vi.useFakeTimers()
+    vi.mocked(pluginRest).mockResolvedValue({ status: 'pending', timestamp: 101, suggestions: [] } as never)
+    const { unmount } = render(<FollowUpSuggestions freshAfter={100} messages={messages} sessionId="session-1" />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000) })
+    unmount()
+    const callsAtUnmount = vi.mocked(pluginRest).mock.calls.length
+    await act(async () => { await vi.advanceTimersByTimeAsync(100_000) })
+    expect(pluginRest).toHaveBeenCalledTimes(callsAtUnmount)
+  })
+
+  it('recovers promptly when a pending generation disappears', async () => {
+    vi.useFakeTimers()
+    let reads = 0
+    vi.mocked(pluginRest).mockImplementation(async (_plugin: string, path: string) => {
+      if (path === '/generate') {return { status: 'ready', suggestions: [{ text: 'Recovered', timestamp: 102 }] } as never}
+      reads += 1
+      return (reads === 1 ? { status: 'pending', timestamp: 101, suggestions: [] } : { status: 'none', suggestions: [] }) as never
+    })
+    render(<FollowUpSuggestions freshAfter={100} messages={messages} sessionId="session-1" />)
+    await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+    expect(screen.getByRole('button', { name: 'Recovered' })).toBeTruthy()
   })
 
   it('checks the stored session first and falls back to the runtime id on load', async () => {
