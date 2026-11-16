@@ -60,8 +60,10 @@ describe('FollowUpSuggestions', () => {
     expect(screen.getByRole('button', { name: 'Show an example' })).toBeTruthy()
 
     vi.mocked(pluginRest).mockResolvedValue({ status: 'empty', timestamp: 200, suggestions: [] } as never)
+
     const completed = [...messages, { role: 'user' as const, content: 'Finish the parser' },
       { role: 'assistant' as const, content: 'The parser is complete and verified.' }]
+
     rerender(<FollowUpSuggestions freshAfter={200} messages={completed} sessionId="session-1" />)
     await act(async () => { await vi.advanceTimersByTimeAsync(100) })
     expect(screen.queryByRole('button', { name: 'Show an example' })).toBeNull()
@@ -199,6 +201,7 @@ describe('FollowUpSuggestions', () => {
     vi.mocked(pluginRest).mockImplementation(async (_plugin: string, path: string) => {
       if (path === '/generate') {throw new Error('Unexpected duplicate generation')}
       reads += 1
+
       return (reads <= 12
         ? { status: 'pending', timestamp: 101, suggestions: [] }
         : { status: 'ready', suggestions: [{ text: 'Check the fix', timestamp: 102 }] }) as never
@@ -218,10 +221,13 @@ describe('FollowUpSuggestions', () => {
     vi.mocked(pluginRest).mockImplementation(async (_plugin: string, path: string) => {
       if (path === '/generate') {
         generating = true
+
         return { status: 'pending', timestamp: 101, suggestions: [] } as never
       }
+
       if (!generating) {return { status: 'none', suggestions: [] } as never}
       reads += 1
+
       return (reads <= 3
         ? { status: 'pending', timestamp: 101, suggestions: [] }
         : { status: 'ready', suggestions: [{ text: 'Inspect result', timestamp: 102 }] }) as never
@@ -250,6 +256,7 @@ describe('FollowUpSuggestions', () => {
     vi.mocked(pluginRest).mockImplementation(async (_plugin: string, path: string) => {
       if (path === '/generate') {return { status: 'ready', suggestions: [{ text: 'Recovered', timestamp: 102 }] } as never}
       reads += 1
+
       return (reads === 1 ? { status: 'pending', timestamp: 101, suggestions: [] } : { status: 'none', suggestions: [] }) as never
     })
     render(<FollowUpSuggestions freshAfter={100} messages={messages} sessionId="session-1" />)

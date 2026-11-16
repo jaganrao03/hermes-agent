@@ -211,14 +211,18 @@ const FollowUpSuggestionsBody: FC<FollowUpSuggestionsProps> = ({ fallbackSession
 
       while (current) {
         const status = await readCached()
+
         if (!current || status === 'settled') {return true}
+
         if (status === 'pending') {
           misses = 0
           pendingDeadline ??= Date.now() + PENDING_POLL_ATTEMPTS * POLL_MS
         } else {
           misses += 1
+
           if (misses >= POLL_ATTEMPTS) {break}
         }
+
         if (pendingDeadline !== undefined && Date.now() >= pendingDeadline) {break}
         await sleep(POLL_MS)
       }
@@ -248,6 +252,7 @@ const FollowUpSuggestionsBody: FC<FollowUpSuggestionsProps> = ({ fallbackSession
           if (!current) {return}
 
           if (settle(result)) {return}
+
           if (result.status === 'pending' && fresh(result.timestamp) && await pollCached()) {return}
         } catch {
           // Silent: the chips simply do not appear.
