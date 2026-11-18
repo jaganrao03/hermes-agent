@@ -229,6 +229,66 @@ class GatewayShutdownMixin(GatewaySessionEndMixin):
         except Exception:
             return 0
 
+    def _cron_ids_at_shutdown_start(self) -> frozenset:
+        """Job ids executing when the stop began; empty when cron can't be imported."""
+        try:
+            from cron.scheduler import get_running_job_ids
+            return frozenset(get_running_job_ids())
+        except Exception:
+            return frozenset()
+
+    def _record_cron_restart(
+        self, job_ids: Any, *, phase: str, reason: str, disposition: str,
+    ) -> None:
+        """Durably record cron jobs a restart interrupted (once per job per shutdown).
+
+        Logging only: the JSONL record + incident row make "which job died, when, why"
+        answerable without grepping agent.log, and cover jobs that self-aborted on the
+        gateway disconnect (which the post-interrupt sweep never sees). Best-effort —
+        shutdown must not fail here.
+        """
+        try:
+            from gateway.cron_restart_log import record_interruptions
+            seen = getattr(self, "_cron_restart_recorded", None)
+            if seen is None:
+                seen = self._cron_restart_recorded = set()
+            fresh = [j for j in dict.fromkeys(job_ids or []) if j and j not in seen]
+            if not fresh:
+                return
+            seen.update(fresh)
+            record_interruptions(fresh, phase=phase, reason=reason, disposition=disposition)
+        except Exception as exc:            # never break the stop path
+            logger.debug("cron restart interruption record failed: %s", exc)
+
+    def _record_cron_restart_survivors(self) -> None:
+        """Record jobs in flight at stop that did not finish cleanly.
+
+        Two shapes: still executing at the final sweep (killed), and gone from the
+        scheduler without a clean completion or while self-paused (abandoned).
+        """
+        snapshot = getattr(self, "_cron_inflight_at_shutdown", frozenset())
+        if not snapshot:
+            return
+        try:
+            from cron.scheduler import get_running_job_ids
+            still = frozenset(get_running_job_ids())
+        except Exception:
+            still = frozenset()
+        try:
+            from gateway.cron_restart_log import job_finished_cleanly
+        except Exception:
+            return
+        abandoned = [j for j in sorted(snapshot - still) if not job_finished_cleanly(j)]
+        self._record_cron_restart(
+            abandoned, phase="finalize", disposition="abandoned",
+            reason="Restart ended the run before it finished; the job may be paused with an "
+                   "unverified admission and needs reconciling.",
+        )
+        self._record_cron_restart(
+            sorted(still), phase="final-cleanup", disposition="killed",
+            reason="Gateway restart killed the job's tool subprocesses before the run finished.",
+        )
+
     def _api_server_hook(self, name: str, *args: Any) -> int:
         """Call the primary API-server adapter's ``name`` hook, clamped >= 0 (0 when the hook is absent).
 
@@ -1777,6 +1837,16 @@ class GatewayShutdownMixin(GatewaySessionEndMixin):
                     "Shutdown (%s): marked %d in-flight cron job(s) interrupted: %s",
                     phase, len(_interrupted), ", ".join(_interrupted),
                 )
+                try:
+                    # Staticmethod context: no ``self`` here, so call the recorder directly.
+                    from gateway.cron_restart_log import record_interruptions
+                    record_interruptions(
+                        _interrupted, phase=phase, disposition="killed",
+                        reason=f"Gateway shutdown ({phase}) killed the job's tool subprocess "
+                               "before the run finished.",
+                    )
+                except Exception as exc:    # never break the stop path
+                    logger.debug("cron restart interruption record failed: %s", exc)
             return _interrupted
 
         def _interrupt_delegations() -> None:
@@ -1858,6 +1928,14 @@ class GatewayShutdownMixin(GatewaySessionEndMixin):
             self, "pre-drain mark_resume_pending"
         )
         _cron_at_start = self._active_cron_job_count()
+        # Snapshot the identities too: the count alone can't name the job that died, and a
+        # job that self-aborts on the disconnect never reaches the post-interrupt sweep.
+        self._cron_inflight_at_shutdown = self._cron_ids_at_shutdown_start()
+        if self._cron_inflight_at_shutdown:
+            logger.info(
+                "Shutdown drain: cron job(s) in flight at stop: %s",
+                ", ".join(sorted(self._cron_inflight_at_shutdown)),
+            )
         _api_at_start = self._active_api_run_count()
         _deferred_at_start = ctx.deferred_count()
         # Cron floor clamped to the watchdog leash; getattr-guard for bare shutdown-path doubles.
@@ -2015,6 +2093,9 @@ class GatewayShutdownMixin(GatewaySessionEndMixin):
         # Off-loop: same blocking sweep as the post-interrupt kill (#116327).
         await GatewayRunner._stop_kill_tool_subprocesses_off_loop("final-cleanup")
         logger.info("Shutdown phase: final-cleanup tool kill done at +%.2fs", ctx.elapsed())
+        # Name every cron job this restart interrupted — including ones that self-aborted on
+        # the disconnect and so never reached the post-interrupt sweep.
+        self._record_cron_restart_survivors()
         # Reap the auxiliary-client cache: clients bound to dead worker-thread loops leak httpx transports.
         def _reap_aux_clients() -> None:
             # Reap the process-global auxiliary-client cache once at the very end of teardown. Per-turn
