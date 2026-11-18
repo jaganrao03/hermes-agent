@@ -570,6 +570,19 @@ def _resolve_agent_model_runtime(model_override, provider_override) -> tuple[str
             requested_provider = provider_override
         resolve_kwargs = {"requested": requested_provider, "target_model": model or None}
         overrides = {}
+    # A client that names only a model (desktop/mobile composer, a remembered session model, a bare
+    # `hermes --model <id>`) leaves the provider unset, and the ladder used to fill it from config's
+    # model.provider. That paired an Anthropic id with openai-codex: the Codex quota probe 429'd and
+    # the user was told "openai-codex/claude-sonnet-5 unavailable" for a route that never existed.
+    # Attribute the model to the provider that actually serves it, unless the caller named one.
+    named_provider = provider_override or (
+        model_override.get("provider") if isinstance(model_override, dict) else None)
+    if not named_provider:
+        from hermes_cli.fallback_config import attribute_model_provider
+
+        if attributed := attribute_model_provider(resolve_kwargs.get("requested"), model):
+            resolve_kwargs["requested"] = attributed
+            requested_provider = attributed
     resolution = _resolve_runtime_with_fallback(resolve_kwargs)
     if resolution.used_fallback:
         if not resolution.selected_model:

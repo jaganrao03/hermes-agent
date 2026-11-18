@@ -85,6 +85,38 @@ def effective_runtime_provider(
     return resolved
 
 
+def attribute_model_provider(provider: Any, model: Any) -> str:
+    """Provider that actually serves *model* when the caller named none (or named the config default).
+
+    A client that sends a bare model id — desktop/mobile composer, ``/model <id>``, a resumed
+    session's remembered model — leaves the provider unset, and callers used to fall back to
+    ``model.provider`` in config.yaml. Pairing an Anthropic id with ``openai-codex`` sent
+    ``claude-sonnet-5`` to the Codex endpoint, spent its quota probe, 429'd, and reported
+    ``Provider fallback: openai-codex/claude-sonnet-5 unavailable`` — a route that never existed
+    and a provider attribution that was simply wrong. Ask the catalog which provider serves the id
+    instead: stay on the caller's provider when its own catalog (or a native-vendor match) owns the
+    name, and keep the caller's choice when the catalog cannot place it at all.
+    """
+    named = str(provider or "").strip()
+    model_id = str(model or "").strip()
+    if not model_id:
+        return named
+    try:
+        from hermes_cli.models import detect_provider_for_model
+
+        match = detect_provider_for_model(model_id, named or "auto")
+    except Exception:  # pragma: no cover - catalog lookup must never break a turn
+        logger.debug("provider attribution skipped for %s (catalog lookup failed)", model_id, exc_info=True)
+        return named
+    if not match:
+        return named
+    detected = str(match[0] or "").strip()
+    if not detected or detected.lower() == named.lower():
+        return named
+    logger.info("model %s is served by %s, not the configured %s — routing there", model_id, detected, named or "(unset)")
+    return detected
+
+
 def pre_agent_fallback_notice(
     primary_provider: Any, primary_model: Any, fallback_provider: Any, fallback_model: Any
 ) -> str:
