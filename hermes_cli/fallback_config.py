@@ -113,18 +113,32 @@ def attribute_model_provider(provider: Any, model: Any) -> str:
     detected = str(match[0] or "").strip()
     if not detected or detected.lower() == named.lower():
         return named
-    logger.info("model %s is served by %s, not the configured %s — routing there", model_id, detected, named or "(unset)")
+    logger.info("provider attribution: %s is served by %s, not %s", model_id, detected, named or "(unset)")
     return detected
 
 
 def pre_agent_fallback_notice(
-    primary_provider: Any, primary_model: Any, fallback_provider: Any, fallback_model: Any
+    primary_provider: Any, primary_model: Any, fallback_provider: Any, fallback_model: Any,
+    reason: str | None = None,
 ) -> str:
     """User-visible one-shot line for a provider switch made during credential resolution, before
     any AIAgent exists (#74349). Shared by the messaging gateway, the TUI/Desktop gateway and cron
-    so the three pre-agent fallback paths cannot drift in wording."""
+    so the three pre-agent fallback paths cannot drift in wording.
+
+    *reason* (``primary_failure_wording(exc)[0]``, e.g. ``rate-limited (429)``) replaces the vague
+    "unavailable" when the caller knows why: a quota window reads as the provider's own limit
+    instead of an outage, and the model is reported with the provider that actually serves it.
+    """
+    # Report the provider that actually serves the model. A session model override layered over
+    # config's ``model.provider`` reported "openai-codex/claude-sonnet-5 unavailable" — a route
+    # nothing ever asked for, so the user read the Codex quota as a Claude failure.
+    if primary_model and primary_provider:
+        primary_provider = attribute_model_provider(primary_provider, primary_model) or primary_provider
     primary_desc = "/".join(str(p).strip() for p in (primary_provider, primary_model) if p) or "primary"
     fallback_desc = "/".join(str(p).strip() for p in (fallback_provider, fallback_model) if p) or "fallback"
+    why = str(reason or "").strip()
+    if why:
+        return f"⚠️ Provider fallback: {primary_desc} {why}; using {fallback_desc} for this response."
     return f"⚠️ Provider fallback: {primary_desc} unavailable; using {fallback_desc} for this response."
 
 

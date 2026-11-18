@@ -77,3 +77,50 @@ def test_explicit_provider_override_wins(monkeypatch, offline_catalog):
     factory._resolve_agent_model_runtime({"model": "claude-sonnet-5", "provider": "openai-codex"}, None)
 
     assert seen["requested"] == "openai-codex"
+
+
+def test_notice_names_the_reason_instead_of_unavailable(offline_catalog):
+    from hermes_cli.fallback_config import pre_agent_fallback_notice
+
+    assert pre_agent_fallback_notice(
+        "anthropic", "claude-sonnet-5", "deepseek", "deepseek-v4-flash", reason="rate-limited (429)"
+    ) == ("⚠️ Provider fallback: anthropic/claude-sonnet-5 rate-limited (429); "
+          "using deepseek/deepseek-v4-flash for this response.")
+    # Callers that do not know why keep the old wording.
+    assert pre_agent_fallback_notice(
+        "openai-codex", "gpt-6-luna", "gemini", "gemini-3.5-flash-lite"
+    ) == ("⚠️ Provider fallback: openai-codex/gpt-6-luna unavailable; "
+          "using gemini/gemini-3.5-flash-lite for this response.")
+
+
+def test_notice_corrects_a_misattributed_primary(offline_catalog):
+    """The exact reported string: an Anthropic session model reported against the Codex provider."""
+    from hermes_cli.fallback_config import pre_agent_fallback_notice
+
+    assert pre_agent_fallback_notice(
+        "openai-codex", "claude-sonnet-5", "gemini", "gemini-3.5-flash-lite"
+    ) == ("⚠️ Provider fallback: anthropic/claude-sonnet-5 unavailable; "
+          "using gemini/gemini-3.5-flash-lite for this response.")
+
+
+def test_notice_built_by_the_fallback_ladder_survives(monkeypatch, offline_catalog):
+    """The ladder knows the failure reason; the later attribution helper must not overwrite it."""
+    from tui_gateway import server
+
+    notice = "⚠️ Provider fallback: anthropic/claude-sonnet-5 rate-limited (429); using deepseek/deepseek-v4-flash for this response."
+
+    class _Resolution:
+        runtime = {"provider": "deepseek", "_fallback_notice": notice}
+        selected_model = "deepseek-v4-flash"
+        used_fallback = True
+
+    # Use the server-bound copy: tui_gateway binds these functions onto the server module at import,
+    # so only that copy resolves _load_cfg/_load_fallback_model from the server namespace.
+    monkeypatch.setattr(server, "_resolve_runtime_with_fallback", lambda kw=None: _Resolution())
+
+    model, runtime = server._resolve_agent_model_runtime(
+        {"model": "claude-sonnet-5", "provider": None}, None)
+
+    assert model == "deepseek-v4-flash"
+    assert runtime["_fallback_notice"] == notice
+

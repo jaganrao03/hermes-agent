@@ -534,9 +534,19 @@ def _resolve_runtime_with_fallback(resolve_kwargs: dict | None = None) -> _Runti
                 # identity so the session/UI shows the provider name, matching the manual-switch path (#98739).
                 runtime["provider"] = effective_runtime_provider(entry, runtime)
                 from hermes_cli.auth import primary_failure_wording
+                wording = primary_failure_wording(primary_exc)[0]
                 logging.getLogger(__name__).warning(
                     "Primary %s (%s), falling back to %s model %s",
-                    primary_failure_wording(primary_exc)[0], primary_exc, fb_provider, fb_model)
+                    wording, primary_exc, fb_provider, fb_model)
+                # Build the notice HERE, where the failure reason is still in hand: the requested
+                # provider/model pair is the attributed one, and a 429/quota window reads as the
+                # primary's own limit ("anthropic/claude-sonnet-5 rate-limited (429)") instead of a
+                # vague "unavailable" for a route nobody asked for.
+                from hermes_cli.fallback_config import pre_agent_fallback_notice
+                _req = resolve_kwargs or {}
+                runtime["_fallback_notice"] = pre_agent_fallback_notice(
+                    _req.get("requested"), _req.get("target_model"), runtime.get("provider"), fb_model,
+                    reason=wording)
                 return _RuntimeFallbackResolution(runtime, fb_model, True)
             except Exception:
                 continue
@@ -594,8 +604,10 @@ def _resolve_agent_model_runtime(model_override, provider_override) -> tuple[str
         # ``model: <id>`` (string shorthand) names no provider.
         cfg_model = _load_cfg().get("model")
         primary_provider = requested_provider or (cfg_model.get("provider") if isinstance(cfg_model, dict) else None)
-        resolution.runtime["_fallback_notice"] = pre_agent_fallback_notice(
-            primary_provider, model, resolution.runtime.get("provider"), resolution.selected_model)
+        # _resolve_runtime_with_fallback already wrote a notice that carries the failure reason
+        # (and the attributed primary); only fill one in when that path did not run.
+        resolution.runtime.setdefault("_fallback_notice", pre_agent_fallback_notice(
+            primary_provider, model, resolution.runtime.get("provider"), resolution.selected_model))
         return resolution.selected_model, resolution.runtime
     if resolution.runtime.get("source") == "local-runtime":
         # Live supervisor beat any persisted loopback URL for this identity.
