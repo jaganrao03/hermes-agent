@@ -1060,10 +1060,12 @@ def validate_config_structure(config: Optional[dict[str, Any]] = None) -> list[C
             return [config_load_issue(exc)]
 
     from hermes_cli.config_value_checks import (
-        _validate_quoted_containers, _validate_timezone, _validate_voice, _validate_web_backends)
+        _validate_model_provider_pairs, _validate_quoted_containers, _validate_timezone, _validate_voice,
+        _validate_web_backends)
     issues: list[ConfigIssue] = []
     _validate_voice(config, issues)
     _validate_timezone(config, issues)
+    _validate_model_provider_pairs(config, issues)
     cp = config.get("custom_providers")
     fb = config.get("fallback_model")
     for value, validator in ((cp, _validate_custom_providers), (fb, _validate_fallback_model)):

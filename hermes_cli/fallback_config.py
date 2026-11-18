@@ -85,7 +85,7 @@ def effective_runtime_provider(
     return resolved
 
 
-def attribute_model_provider(provider: Any, model: Any) -> str:
+def attribute_model_provider(provider: Any, model: Any, *, static_only: bool = False) -> str:
     """Provider that actually serves *model* when the caller named none (or named the config default).
 
     A client that sends a bare model id — desktop/mobile composer, ``/model <id>``, a resumed
@@ -96,15 +96,23 @@ def attribute_model_provider(provider: Any, model: Any) -> str:
     and a provider attribution that was simply wrong. Ask the catalog which provider serves the id
     instead: stay on the caller's provider when its own catalog (or a native-vendor match) owns the
     name, and keep the caller's choice when the catalog cannot place it at all.
+
+    ``static_only`` restricts the lookup to the shipped catalogs (no credential probing, no
+    network) so config validation can call it on every startup.
     """
     named = str(provider or "").strip()
     model_id = str(model or "").strip()
     if not model_id:
         return named
     try:
-        from hermes_cli.models import detect_provider_for_model
+        if static_only:
+            from hermes_cli.models import detect_static_provider_for_model as detect
 
-        match = detect_provider_for_model(model_id, named or "auto")
+            match = detect(model_id, named or "auto")
+        else:
+            from hermes_cli.models import detect_provider_for_model as detect
+
+            match = detect(model_id, named or "auto")
     except Exception:  # pragma: no cover - catalog lookup must never break a turn
         logger.debug("provider attribution skipped for %s (catalog lookup failed)", model_id, exc_info=True)
         return named

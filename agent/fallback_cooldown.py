@@ -69,6 +69,13 @@ def _arm_rate_limit_cooldown(
         backoff_seconds = min(60 * (2 ** backoff_count), 14400)
         source = "exponential fallback"
     agent._rate_limited_until = time.monotonic() + backoff_seconds
+    # Name the route and its reset window BEFORE the backoff line: the 429 that triggered this is
+    # often an Anthropic subscription window, whose body is just "Error" with no Retry-After.
+    from hermes_cli.rate_limit_log import log_rate_limit_reset
+    log_rate_limit_reset(
+        getattr(agent, "provider", "") or primary_provider, getattr(agent, "model", None),
+        wait_seconds=provider_delay,
+        status="billing quota exhausted (402)" if reason == FailoverReason.billing else "rate limit (429)")
     logging.info(
         "Rate-limit backoff level %d: cooldown %d s (%.1f min, backoff#%d, %s)",
         backoff_count, backoff_seconds, backoff_seconds / 60, backoff_count + 1, source,

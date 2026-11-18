@@ -1176,7 +1176,8 @@ def resolve_runtime_with_fallback(config: Optional[dict[str, Any]], *, requested
         return resolve_runtime_provider(requested=requested, target_model=target_model,
                                         explicit_base_url=explicit_base_url, explicit_api_key=explicit_api_key), None
     except AuthError as primary_exc:
-        from hermes_cli.fallback_config import effective_runtime_provider, get_fallback_chain, resolve_entry_api_key
+        from hermes_cli.fallback_config import (
+            attribute_model_provider, effective_runtime_provider, get_fallback_chain, resolve_entry_api_key)
         for entry in get_fallback_chain(config):
             provider = (entry.get("provider") or "").strip().lower()
             model = (entry.get("model") or "").strip()
@@ -1200,7 +1201,17 @@ def resolve_runtime_with_fallback(config: Optional[dict[str, Any]], *, requested
             runtime["provider"] = effective_runtime_provider(entry, runtime)
             # A rate-limit/quota cap is transient (credentials are fine, re-auth cannot help); the log must not
             # mislabel it as an auth failure (#32790).
+            wording = primary_failure_wording(primary_exc)[0]
             logger.warning("Primary provider %s (%s). Falling back to %s/%s",
-                           primary_failure_wording(primary_exc)[0], primary_exc, provider, model)
+                           wording, primary_exc, provider, model)
+            # Say WHEN the refused window reopens, against the route that actually refused:
+            # Anthropic's subscription 429 is a bare "Error" with no Retry-After, so without this
+            # line the only trace of the cause is the fallback itself.
+            if "rate-limited" in wording or "quota" in wording.lower():
+                from hermes_cli.rate_limit_log import log_rate_limit_reset
+                log_rate_limit_reset(
+                    attribute_model_provider(
+                        requested or ((config or {}).get("model") or {}).get("provider"), target_model),
+                    target_model, wait_seconds=getattr(primary_exc, "retry_after", None))
             return runtime, entry
         raise primary_exc

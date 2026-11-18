@@ -120,3 +120,69 @@ def _validate_quoted_containers(config: dict[str, Any], issues: list[ConfigIssue
                    "and every reader ignores the string",
                    f"Run: hermes config set {key} {shlex.quote(value)}  (stores a real {kind}), "
                    "or remove the quotes in config.yaml")
+
+
+def _model_provider_pairs(config: dict[str, Any]) -> list[tuple[str, Any, Any]]:
+    """Every ``(where, provider, model)`` pair config asks Hermes to send, in resolution order."""
+    pairs: list[tuple[str, Any, Any]] = []
+    model_cfg = config.get("model")
+    if isinstance(model_cfg, dict):
+        pairs.append(("model.default", model_cfg.get("provider"), model_cfg.get("default")))
+    for key in ("fallback_providers", "fallback_model"):
+        entries = config.get(key)
+        if isinstance(entries, dict):
+            entries = [entries]
+        if not isinstance(entries, list):
+            continue
+        for index, entry in enumerate(entries):
+            if isinstance(entry, dict):
+                pairs.append((f"{key}[{index}]", entry.get("provider"), entry.get("model")))
+    return pairs
+
+
+def _single_vendor(provider: str) -> str | None:
+    """The one vendor a first-party provider natively serves, or None when it is not single-vendor.
+
+    Aggregators (``nous``, ``openrouter``) and custom/local endpoints re-expose several vendors or
+    none, so no pair against them can be called wrong; ``None`` skips them.
+    """
+    from hermes_cli.model_normalize import detect_vendor
+    from hermes_cli.models import _PROVIDER_MODELS, normalize_provider
+
+    vendors = {detect_vendor(mid) for mid in _PROVIDER_MODELS.get(normalize_provider(provider), ())}
+    vendors.discard(None)
+    return next(iter(vendors)) if len(vendors) == 1 else None
+
+
+def _validate_model_provider_pairs(config: dict[str, Any], issues: list[ConfigIssue]) -> None:
+    """Reject a provider/model pair no endpoint can serve (``openai-codex`` + ``claude-sonnet-5``).
+
+    Such a pair is not a typo Hermes recovers from: the request goes to the named provider's
+    endpoint, which answers 401/429 for a model it does not host, and the resulting fallback notice
+    names a route that never existed — so one provider's quota error reads like another's outage.
+
+    Only provable mismatches are flagged, from shipped catalog data alone (no credentials, no
+    network): the provider must natively serve exactly one vendor and the model must classify to a
+    different one. An id the classifier cannot place, a pair inside the provider's own catalog, and
+    any aggregator / custom / local route all stay silent.
+    """
+    from hermes_cli.model_normalize import detect_vendor
+
+    for where, provider, model in _model_provider_pairs(config):
+        if not (isinstance(provider, str) and provider.strip()):
+            continue
+        if not (isinstance(model, str) and model.strip()):
+            continue
+        vendor = detect_vendor(model.strip())
+        if not vendor or not (native := _single_vendor(provider.strip())):
+            continue
+        if vendor == native:
+            continue
+        _issue(issues, "error",
+               f"{where}: model '{model.strip()}' is served by the {vendor} vendor, but provider "
+               f"'{provider.strip()}' only serves {native} — the request goes to an endpoint that "
+               "cannot serve it",
+               f"Set provider to a {vendor} provider for '{model.strip()}', or use a {native} model "
+               f"with '{provider.strip()}'. Left as-is, the first request 401/429s and the fallback "
+               "notice names a route that never existed.")
+
