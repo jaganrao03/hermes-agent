@@ -7,10 +7,41 @@ import { pathToFileURL } from 'node:url'
 import { productOutput, withProduct, workspaceTool } from './frontend-common.mjs'
 import { buildInputs, outputIntact, recordProduct, sourceHash } from './freshness.mjs'
 import { checkWebappBudget } from './check-webapp-budget.mjs'
-import { pruneStaleAssets } from './prune-webapp-assets.mjs'
+
 
 // Vite's build manifest (apps/desktop/vite.config.ts names it too): the files a generation emitted.
 const manifestName = 'renderer-manifest.json'
+
+/** Carry every historical asset forward. Refuse uncertainty rather than break old tabs. */
+export function preserveWebappAssets(previous, next) {
+  const source = join(previous, 'assets')
+  const target = join(next, 'assets')
+  if (!existsSync(previous)) return []
+  if (!existsSync(source)) throw new Error(`Previous webapp assets missing: ${source}`)
+  const kept = []
+  function copyTree(from, to, rel = '') {
+    const srcStat = lstatSync(from)
+    if (srcStat.isSymbolicLink()) throw new Error(`Refusing asset symlink: ${from}`)
+    if (srcStat.isDirectory()) {
+      if (existsSync(to)) {
+        const dstStat = lstatSync(to)
+        if (dstStat.isSymbolicLink() || !dstStat.isDirectory()) throw new Error(`Asset directory conflict: ${to}`)
+      } else mkdirSync(to)
+      for (const entry of readdirSync(from)) copyTree(join(from, entry), join(to, entry), join(rel, entry))
+      return
+    }
+    if (!srcStat.isFile()) throw new Error(`Unsupported retained asset: ${from}`)
+    const dstStat = lstatSync(to, { throwIfNoEntry: false })
+    if (dstStat) {
+      if (dstStat.isSymbolicLink() || !dstStat.isFile() || !readFileSync(from).equals(readFileSync(to))) {
+        throw new Error(`Retained asset conflict: ${to}`)
+      }
+    } else copyFileSync(from, to, constants.COPYFILE_EXCL)
+    kept.push(join('assets', rel))
+  }
+  copyTree(source, target)
+  return kept
+}
 
 // The build still publishes; say why open tabs of the previous generation may miss this chunk.
 const notKept = (from, error) =>
@@ -87,18 +118,13 @@ export async function buildWebapp({ source, workspace, out }) {
       root: join(workspace, app),
       configLoader: 'runner',
       cacheDir: join(scratch, 'vite-cache'),
-      build: { outDir: product, emptyOutDir: true, manifest: manifestName },
+      // withProduct creates a new empty directory, so Vite need not remove anything.
+      build: { outDir: product, emptyOutDir: false, manifest: manifestName },
     })
     if (!existsSync(join(product, 'index.html'))) throw new Error('Webapp build did not produce index.html')
     // Before the receipt, whose output hash covers the kept files too.
-    const retained = keepPreviousGeneration(out, product)
-    // Everything under assets/ must be named by this generation's manifest or retained for a tab on
-    // the previous one; anything else is a leftover nothing links to. Set
-    // HERMES_PRUNE_RETAINED_CHUNKS=1 to drop the retained set as well — correct for a deployment
-    // that reloads every client anyway, at the cost of an old tab's unloaded lazy chunk.
-    const keep = process.env.HERMES_PRUNE_RETAINED_CHUNKS === '1' ? new Set() : new Set(retained)
-    const { removed } = pruneStaleAssets({ product, keep })
-    if (removed.length) console.log(`webapp: pruned ${removed.length} stale asset(s): ${removed.join(', ')}`)
+    const retained = preserveWebappAssets(out, product)
+    console.log(`webapp: preserved ${retained.length} existing asset(s)`)
     const violations = checkWebappBudget({ product })
     for (const violation of violations) console.error(`webapp budget: ${violation}`)
     if (violations.length) throw new Error(`Webapp build is over its size budget (${violations.length} violation(s))`)

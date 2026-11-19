@@ -207,7 +207,8 @@ export default defineConfig(({ command }) => ({
             // chunk, and a group would merge them back into one.
             {
               name: 'shiki',
-              test: /node_modules[\\/](shiki|@shikijs|react-shiki|@streamdown[\\/]code|oniguruma-to-es|oniguruma-parser|regex(-[^\\/]+)?)[\\/]/
+              // Grammars must stay separate so dynamic language imports load only what they need.
+              test: /node_modules[\\/](shiki[\\/](?!dist[\\/]langs[\\/])|@shikijs[\\/](?!langs[\\/])|react-shiki[\\/]|@streamdown[\\/]code[\\/]|oniguruma-to-es[\\/]|oniguruma-parser[\\/]|regex(-[^\\/]+)?[\\/])/
             },
             { name: 'katex', test: /node_modules[\\/]katex[\\/]/ }
           ]

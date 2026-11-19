@@ -242,8 +242,9 @@ def build_local_transcribe_kwargs(stt_config: Optional[dict[str, Any]] = None) -
     local_cfg = stt_config.get("local") or {}
     # ``vad: null`` in YAML means "default on".
     vad_enabled = local_cfg.get("vad", True)
+    beam_size = _config_number(local_cfg, "beam_size", 1, int)
     kwargs: dict[str, Any] = {
-        "beam_size": 5,
+        "beam_size": max(1, min(beam_size, 5)),
         "condition_on_previous_text": False,
         "vad_filter": vad_enabled is None or bool(vad_enabled)}
     if kwargs["vad_filter"]:

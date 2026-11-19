@@ -4,14 +4,15 @@ import curation from '../../../../../shared/src/catalog-curation.json'
 
 const { artwork, featured } = curation
 
-const images = import.meta.glob<string>('../../../../../../website/static/img/catalog/*.jpg', {
+// Keep the shared curation's JPEG filenames for the website; the app ships smaller WebP copies.
+const images = import.meta.glob<string>('../../../../../../website/static/img/catalog/*.webp', {
   eager: true,
   import: 'default',
   query: '?url'
 })
 
 const artworkUrl = (filename: string | undefined) =>
-  filename ? images[`../../../../../../website/static/img/catalog/${filename}`] ?? null : null
+  filename ? images[`../../../../../../website/static/img/catalog/${filename.replace(/\.jpg$/, '.webp')}`] ?? null : null
 
 interface CurationRow {
   name?: string

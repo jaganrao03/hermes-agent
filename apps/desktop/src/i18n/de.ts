@@ -4912,6 +4912,8 @@ export const deOverrides = {
       refresh: 'Aktualisieren',
       moreActions: 'Weitere Aktionen',
       branchNewChat: 'In neuem Chat abzweigen',
+      replyToMessage: 'Auf Nachricht antworten',
+      replyTemplate: quote => `Antwort an Hermes:\n${quote}\n\nMeine Antwort:`,
       react: 'Reagieren',
       dismissError: 'Fehler schließen',
       responseStopped: 'Antwort gestoppt',

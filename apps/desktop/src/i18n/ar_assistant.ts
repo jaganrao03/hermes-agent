@@ -49,6 +49,8 @@ export const arAssistant = {
       refresh: 'تحديث',
       moreActions: 'إجراءات إضافية',
       branchNewChat: 'تفريع إلى محادثة جديدة',
+      replyToMessage: 'الرد على الرسالة',
+      replyTemplate: quote => `الرد على Hermes:\n${quote}\n\nردي:`,
       react: 'تفاعل',
       dismissError: 'تجاهل الخطأ',
       errorLayers: {

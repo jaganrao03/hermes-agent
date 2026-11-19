@@ -21,9 +21,10 @@ import { $connection } from '@/store/session'
 
 import { useComposerActions } from '../../hooks/use-composer-actions'
 import type { QueueEditState } from '../composer-utils'
-import { type ComposerTarget, getActiveComposer, markActiveComposer } from '../focus'
+import { type ComposerTarget, getActiveComposer, markActiveComposer, requestComposerInsert } from '../focus'
 import { caretOffsetInEditor, composerPlainText } from '../rich-editor'
 import { type ComposerScope, ComposerScopeProvider, MAIN_COMPOSER_SCOPE } from '../scope'
+import { ComposerVisibleContext } from '../visibility'
 
 import { useComposerDraft } from './use-composer-draft'
 
@@ -838,6 +839,56 @@ describe('useComposerDraft — a hidden keep-alive tab never auto-focuses its co
     expect(composerPlainText(draft.editorRef.current!)).toBe('rejected draft')
     expectForegroundSelectionPreserved(foreground)
     foreground.editor.remove()
+  })
+})
+
+describe('reply insertion into real composer drafts', () => {
+  afterEach(() => {
+    cleanup()
+    clearSessionDraft('reply-main')
+    clearSessionDraft('reply-tile')
+    markActiveComposer('main')
+  })
+
+  it('does not alter a hidden composer sharing the visible target', async () => {
+    function Draft({ id }: { id: string }) {
+      const draft = useComposerDraft({ activeQueueSessionKey: id, focusKey: null, inputDisabled: false, queueEditRef: { current: null }, sessionId: id })
+
+      return <div contentEditable data-slot="composer-rich-input" data-testid={id} ref={draft.editorRef} />
+    }
+
+    stashSessionDraft('reply-main', 'visible draft', [])
+    stashSessionDraft('reply-tile', 'hidden draft', [])
+
+    const { getByTestId } = render(<>
+      <ComposerVisibleContext.Provider value={true}><Draft id="reply-main" /></ComposerVisibleContext.Provider>
+      <ComposerVisibleContext.Provider value={false}><Draft id="reply-tile" /></ComposerVisibleContext.Provider>
+    </>)
+
+    act(() => { requestComposerInsert('quoted reply', { mode: 'block', target: 'main', visibleOnly: true }) })
+    await waitFor(() => expect(composerPlainText(getByTestId('reply-main'))).toBe('visible draft\n\nquoted reply'))
+    expect(composerPlainText(getByTestId('reply-tile'))).toBe('hidden draft')
+  })
+
+  it('appends to the targeted existing draft without modifying the other composer', async () => {
+    function Draft({ id }: { id: string }) {
+      const draft = useComposerDraft({ activeQueueSessionKey: id, focusKey: null, inputDisabled: false, queueEditRef: { current: null }, sessionId: id })
+
+      return <div contentEditable data-slot="composer-rich-input" data-testid={id} ref={draft.editorRef} />
+    }
+
+    stashSessionDraft('reply-main', 'main draft', [])
+    stashSessionDraft('reply-tile', 'existing tile draft', [])
+
+    const { getByTestId } = render(<>
+      <ComposerScopeProvider value={MAIN_COMPOSER_SCOPE}><Draft id="reply-main" /></ComposerScopeProvider>
+      <ComposerScopeProvider value={{ ...MAIN_COMPOSER_SCOPE, target: 'tile:reply' }}><Draft id="reply-tile" /></ComposerScopeProvider>
+    </>)
+
+    const quote = 'Replying to Hermes:\n>     code\n> \n>   more  \n\nMy reply:'
+    act(() => { requestComposerInsert(quote, { mode: 'block', target: 'tile:reply' }) })
+    await waitFor(() => expect(composerPlainText(getByTestId('reply-tile'))).toBe(`existing tile draft\n\n${quote}`))
+    expect(composerPlainText(getByTestId('reply-main'))).toBe('main draft')
   })
 })
 

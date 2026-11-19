@@ -28,6 +28,7 @@ import { ChangedFilesCard } from '@/components/assistant-ui/thread/changed-files
 import {
   contentHasVisibleText,
   messageContentText,
+  partText,
   pickPrimaryPreviewTarget
 } from '@/components/assistant-ui/thread/content'
 import { FollowUpSuggestions } from '@/components/assistant-ui/thread/follow-up-suggestions'
@@ -1373,6 +1374,9 @@ const AssistantActionBar: FC<MessageActionProps & { durationS?: number }> = ({
   const { t } = useI18n()
   const copy = t.assistant.thread
   const { reload: reloadMessage, disabled: reloadDisabled } = useActionBarReload()
+  const scope = useComposerScope()
+  const replyDisabled = useAuiState(s => s.thread.isDisabled)
+  const replyMessageRuntime = useMessageRuntime()
   const touch = useStore($touchPointer)
 
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -1410,6 +1414,27 @@ const AssistantActionBar: FC<MessageActionProps & { durationS?: number }> = ({
       }
     : undefined
 
+  const replyToMessage = () => {
+    const content = replyMessageRuntime.getState().content
+
+    const text: string = typeof content === 'string' ? content : Array.isArray(content) ? content.reduce((state, part) => {
+      const value = partText(part)
+
+      if (value) {
+        state.text += state.separated && state.text ? `\n\n${value}` : value
+        state.separated = false
+      } else if (typeof part === 'object' && part !== null && 'type' in part && part.type !== 'text') {
+        state.separated = true
+      }
+
+      return state
+    }, { text: '', separated: false }).text : ''
+
+    if (!text.trim()) { return }
+    const quote = text.split('\n').map(line => `> ${line}`).join('\n')
+    requestComposerInsert(copy.replyTemplate(quote), { mode: 'block', target: scope.target, visibleOnly: true })
+  }
+
   const copyButton = (
     <CopyButton
       appearance="icon"
@@ -1446,6 +1471,9 @@ const AssistantActionBar: FC<MessageActionProps & { durationS?: number }> = ({
       >
         <div className="aui-message-actions-desktop flex items-center justify-end gap-1.5">
           <MessageHoverTime className="mr-1 px-0.5" />
+          {!replyDisabled && <TooltipIconButton onClick={replyToMessage} tooltip={copy.replyToMessage}>
+            <Codicon name="reply" />
+          </TooltipIconButton>}
           {branchInNewChat && (
             <TooltipIconButton onClick={branchInNewChat} tooltip={copy.branchNewChat}>
               <GitForkIcon className="size-3.5" />
@@ -1464,6 +1492,9 @@ const AssistantActionBar: FC<MessageActionProps & { durationS?: number }> = ({
             listener, and the CSS already hides this cluster everywhere else. */}
         {touch && (
           <div className="aui-message-actions-touch items-center justify-end gap-1">
+            {!replyDisabled && <TooltipIconButton onClick={replyToMessage} tooltip={copy.replyToMessage}>
+              <Codicon name="reply" />
+            </TooltipIconButton>}
             {copyButton}
             <ActionsMenu
               ariaLabel={copy.moreActions}

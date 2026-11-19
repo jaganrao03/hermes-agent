@@ -104,6 +104,11 @@ test('unreferenced top-level files are ignored', () => {
   assert.deepEqual(check({ 'big.bin': 21 * MB }), [])
 })
 
+test('missing referenced assets fail the budget check', () => {
+  const violations = check({}, { manifest: { 'src/app.ts': { file: 'assets/missing.js' } } })
+  assert.ok(violations.some(v => /assets\/missing\.js.*missing/.test(v)))
+})
+
 test('a missing product directory throws', () => {
   assert.throws(() => checkWebappBudget({ product: join(tmpdir(), 'webapp-budget-nope') }), /No built product/)
 })

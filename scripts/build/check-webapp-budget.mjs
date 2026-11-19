@@ -53,7 +53,10 @@ export function checkWebappBudget({ product, limits = budget } = {}) {
   let total = 0
   for (const path of [...referencedPaths(root)].sort()) {
     const file = join(root, path)
-    if (!existsSync(file) || !statSync(file).isFile()) continue
+    if (!existsSync(file) || !statSync(file).isFile()) {
+      violations.push(`${path} missing referenced asset`)
+      continue
+    }
     const size = statSync(file).size
     total += size
     if (path.endsWith('.js')) js += size

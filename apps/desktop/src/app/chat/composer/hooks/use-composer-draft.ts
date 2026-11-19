@@ -344,8 +344,8 @@ export function useComposerDraft({
       setFocusRequestId(id => id + 1)
     })
 
-    const offInsert = onComposerInsertRequest(({ mode, target: requested, text, token }) => {
-      if (requested === target) {
+    const offInsert = onComposerInsertRequest(({ mode, target: requested, text, token, visibleOnly }) => {
+      if (requested === target && (!visibleOnly || (visibleRef.current && editorRef.current && !isElementInHiddenPane(editorRef.current)))) {
         // A tokened insert came from the plugin SDK — echo whether the text
         // actually landed, so its promise never settles on a silent no-op.
         ackComposerInsert(token, appendExternalText(text, mode))

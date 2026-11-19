@@ -4489,6 +4489,8 @@ export const en: Translations = {
       refresh: 'Refresh',
       moreActions: 'More actions',
       branchNewChat: 'Branch in new chat',
+      replyToMessage: 'Reply to message',
+      replyTemplate: quote => `Replying to Hermes:\n${quote}\n\nMy reply:`,
       react: 'React',
       dismissError: 'Dismiss error',
       responseStopped: 'Response stopped',

@@ -49,6 +49,8 @@ export const zhHantAssistant = {
       refresh: '重新整理',
       moreActions: '更多動作',
       branchNewChat: '在新聊天中分支',
+      replyToMessage: '回覆訊息',
+      replyTemplate: quote => `回覆 Hermes：\n${quote}\n\n我的回覆：`,
       react: '回應',
       dismissError: '關閉錯誤',
       errorGenericProvider: 'AI 服務',

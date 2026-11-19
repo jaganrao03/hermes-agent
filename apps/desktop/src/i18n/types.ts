@@ -3940,6 +3940,8 @@ export interface Translations extends NoticeTranslations {
       refresh: string
       moreActions: string
       branchNewChat: string
+      replyToMessage: string
+      replyTemplate: (quote: string) => string
       react: string
       dismissError: string
       responseStopped: string

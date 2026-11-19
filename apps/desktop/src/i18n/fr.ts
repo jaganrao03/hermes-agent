@@ -4922,6 +4922,8 @@ export const frOverrides = {
       refresh: 'Actualiser',
       moreActions: "Plus d'actions",
       branchNewChat: 'Créer une branche dans une nouvelle conversation',
+      replyToMessage: 'Répondre au message',
+      replyTemplate: quote => `Réponse à Hermes :\n${quote}\n\nMa réponse :`,
       react: 'Réagir',
       dismissError: "Ignorer l'erreur",
       responseStopped: 'Réponse interrompue',

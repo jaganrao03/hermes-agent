@@ -111,7 +111,6 @@ export function publishDirectory(staged, out, { source } = {}) {
   try {
     retryHeld(() => renameSync(out, backup))
   } catch (error) {
-    rmSync(backupRoot, { recursive: true, force: true })
     throw error
   }
   try {
@@ -123,10 +122,9 @@ export function publishDirectory(staged, out, { source } = {}) {
       error.message += `; rollback failed (${rollbackError.message}); previous product kept at ${backup}`
       throw error
     }
-    rmSync(backupRoot, { recursive: true, force: true })
     throw error
   }
-  rmSync(backupRoot, { recursive: true, force: true })
+  console.log(`Previous product archived at ${backup}`)
 }
 
 export async function withProduct(out, compile, { source } = {}) {
@@ -135,12 +133,9 @@ export async function withProduct(out, compile, { source } = {}) {
   const scratch = mkdtempSync(path.join(path.dirname(out), `.${path.basename(out)}-build-`))
   const product = path.join(scratch, 'product')
   mkdirSync(product)
-  try {
-    await compile(product, scratch)
-    publishDirectory(product, out, { source })
-  } finally {
-    await rmTree(scratch)
-  }
+  // Preserve staging and its diagnostics on both success and failure.
+  await compile(product, scratch)
+  publishDirectory(product, out, { source })
 }
 
 // macOS's Finder/Spotlight can drop a fresh .DS_Store (or xattr) into a

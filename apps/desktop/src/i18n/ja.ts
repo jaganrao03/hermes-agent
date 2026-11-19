@@ -3343,6 +3343,8 @@ export const jaOverrides = {
       refresh: '更新',
       moreActions: 'その他のアクション',
       branchNewChat: '新しいチャットでブランチ',
+      replyToMessage: 'メッセージに返信',
+      replyTemplate: quote => `Hermesへの返信:\n${quote}\n\n返信:`,
       react: 'リアクション',
       dismissError: 'エラーを閉じる',
       errorGenericProvider: 'AI サービス',

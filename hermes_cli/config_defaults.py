@@ -1160,6 +1160,7 @@ DEFAULT_CONFIG = {
             # ABOVE no_speech_prob_threshold AND avg_logprob BELOW logprob_threshold.
             "vad": True,
             "vad_min_silence_ms": 500,  # min silence (ms) that splits speech chunks
+            "beam_size": 1,  # faster-whisper beam search width (1-5)
             "no_speech_prob_threshold": 0.6,
             "logprob_threshold": -1.0,
             "unload_after_idle_seconds": 0,  # 0 = never; e.g. 300 frees the model after 5min

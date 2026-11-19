@@ -4897,6 +4897,8 @@ export const esOverrides = {
       refresh: 'Actualizar',
       moreActions: 'Más acciones',
       branchNewChat: 'Ramificar en chat nuevo',
+      replyToMessage: 'Responder al mensaje',
+      replyTemplate: quote => `Respondiendo a Hermes:\n${quote}\n\nMi respuesta:`,
       react: 'Reaccionar',
       dismissError: 'Descartar error',
       responseStopped: 'Respuesta detenida',

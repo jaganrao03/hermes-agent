@@ -9,6 +9,8 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { MemoryRouter, useLocation } from 'react-router'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { ComposerScopeProvider, MAIN_COMPOSER_SCOPE } from '@/app/chat/composer/scope'
+import { I18nProvider } from '@/i18n'
 import { en } from '@/i18n/en'
 import type { ErrorCardCopy } from '@/i18n/types'
 import { $touchPointer } from '@/lib/touch-interaction'
@@ -68,6 +70,8 @@ afterEach(() => {
   cleanup()
   requestFreshSession.mockClear()
   startManualProviderOAuth.mockClear()
+  requestComposerInsert.mockClear()
+  requestComposerSubmit.mockClear()
   requestModelMenuToggle.mockReset().mockReturnValue(true)
   $displayTimestamps.set(true)
   $touchPointer.set(false)
@@ -193,6 +197,7 @@ function LocationProbe() {
 
 function Harness({
   assistant = assistantMessage(),
+  messages,
   onBranchInNewChat,
   onCancel,
   onDismissError,
@@ -202,6 +207,7 @@ function Harness({
   isDisabled = false
 }: {
   assistant?: ThreadMessage
+  messages?: ThreadMessage[]
   onBranchInNewChat?: (messageId: string) => void
   onCancel?: () => void
   onDismissError?: (messageId: string) => void
@@ -211,7 +217,7 @@ function Harness({
   isDisabled?: boolean
 }) {
   const runtime = useExternalStoreRuntime<ThreadMessage>({
-    messages: [userMessage(), assistant],
+    messages: messages ?? [userMessage(), assistant],
     isRunning,
     isDisabled,
     onNew: async () => {},
@@ -281,6 +287,74 @@ describe('merged hover timestamps and touch actions', () => {
       expect(onRestoreToMessage).toHaveBeenCalledWith('user-1', expect.objectContaining({ text: 'question one' }))
       expect(onCancel).not.toHaveBeenCalled()
     }
+  })
+})
+
+describe('reply to an assistant message', () => {
+  it('does not offer a reply for empty text or a disabled thread', () => {
+    const empty = { ...assistantMessage(), content: [{ type: 'text', text: '  ' }] } as ThreadMessage
+    const view = render(<Harness assistant={empty} />)
+    expect(screen.queryByRole('button', { name: 'Reply to message' })).toBeNull()
+    view.unmount()
+    render(<Harness isDisabled />)
+    expect(screen.queryByRole('button', { name: 'Reply to message' })).toBeNull()
+  })
+  it('separates text blocks across a tool call without adding separators within text runs', () => {
+    const assistant = { ...assistantMessage(), content: [
+      { type: 'text', text: 'checking' },
+      { type: 'text', text: ' now.' },
+      { type: 'tool-call', toolCallId: 'call-1', toolName: 'search', args: {} },
+      { type: 'text', text: 'Found it.' }
+    ] } as ThreadMessage
+
+    render(<Harness assistant={assistant} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Reply to message' }))
+    expect(requestComposerInsert).toHaveBeenCalledWith('Replying to Hermes:\n> checking now.\n> \n> Found it.\n\nMy reply:', { mode: 'block', target: 'main', visibleOnly: true })
+  })
+  it('quotes the clicked response and targets its non-main composer', () => {
+    const first = { ...assistantMessage(), id: 'first', content: [{ type: 'text', text: 'first response' }] } as ThreadMessage
+    const second = { ...assistantMessage(), id: 'second', content: [{ type: 'text', text: 'second response' }] } as ThreadMessage
+    const secondUser = { ...userMessage(), id: 'user-2' } as ThreadMessage
+    render(<ComposerScopeProvider value={{ ...MAIN_COMPOSER_SCOPE, target: 'tile:reply-test' }}>
+      <Harness messages={[userMessage(), first, secondUser, second]} />
+    </ComposerScopeProvider>)
+    const buttons = screen.getAllByRole('button', { name: 'Reply to message' })
+    expect(buttons).toHaveLength(2)
+    fireEvent.click(buttons[0]!)
+    expect(requestComposerInsert).toHaveBeenLastCalledWith('Replying to Hermes:\n> first response\n\nMy reply:', { mode: 'block', target: 'tile:reply-test', visibleOnly: true })
+    fireEvent.click(buttons[1]!)
+    expect(requestComposerInsert).toHaveBeenLastCalledWith('Replying to Hermes:\n> second response\n\nMy reply:', { mode: 'block', target: 'tile:reply-test', visibleOnly: true })
+    expect(requestComposerSubmit).not.toHaveBeenCalled()
+  })
+
+  it('localizes the reply action and template in Spanish', () => {
+    render(<I18nProvider configClient={null} initialLocale="es"><Harness /></I18nProvider>)
+    fireEvent.click(screen.getByRole('button', { name: 'Responder al mensaje' }))
+    expect(requestComposerInsert).toHaveBeenCalledWith('Respondiendo a Hermes:\n> done\n\nMi respuesta:', { mode: 'block', target: 'main', visibleOnly: true })
+  })
+
+  it('preserves whitespace in quoted response text', () => {
+    const assistant = { ...assistantMessage(), content: [{ type: 'text', text: '    code\n\n  next  ' }] } as ThreadMessage
+    render(<Harness assistant={assistant} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Reply to message' }))
+    expect(requestComposerInsert).toHaveBeenCalledWith('Replying to Hermes:\n>     code\n> \n>   next  \n\nMy reply:', { mode: 'block', target: 'main', visibleOnly: true })
+  })
+
+  it('places the selected response in the composer without sending it', () => {
+    requestComposerInsert.mockClear()
+    requestComposerSubmit.mockClear()
+    render(<Harness />)
+    fireEvent.click(screen.getByRole('button', { name: 'Reply to message' }))
+    expect(requestComposerInsert).toHaveBeenCalledWith('Replying to Hermes:\n> done\n\nMy reply:', { mode: 'block', target: 'main', visibleOnly: true })
+    expect(requestComposerSubmit).not.toHaveBeenCalled()
+  })
+
+  it('offers a reply action on touch devices', () => {
+    $touchPointer.set(true)
+    render(<Harness />)
+    const buttons = screen.getAllByRole('button', { name: 'Reply to message' })
+    fireEvent.click(buttons[buttons.length - 1]!)
+    expect(requestComposerInsert).toHaveBeenCalledWith('Replying to Hermes:\n> done\n\nMy reply:', { mode: 'block', target: 'main', visibleOnly: true })
   })
 })
 

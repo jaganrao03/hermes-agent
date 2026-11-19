@@ -3581,6 +3581,8 @@ export const ruOverrides = {
       refresh: 'Обновить',
       moreActions: 'Ещё действия',
       branchNewChat: 'Ветка в новый чат',
+      replyToMessage: 'Ответить на сообщение',
+      replyTemplate: quote => `Ответ Hermes:\n${quote}\n\nМой ответ:`,
       react: 'Реакция',
       dismissError: 'Скрыть ошибку',
       errorCodes: ruErrorCodes,

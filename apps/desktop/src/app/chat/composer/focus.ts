@@ -34,6 +34,8 @@ interface InsertDetail {
   mode: ComposerInsertMode
   target: ComposerTarget
   text: string
+  /** Restrict this insert to a visible surface; other bus callers retain their existing semantics. */
+  visibleOnly?: boolean
   /** Present when the caller wants an acknowledgement (plugin SDK
    *  `host.composer.insertText`); the claiming subscriber echoes it back on
    *  {@link INSERT_REPLY_EVENT}. Internal fire-and-forget inserts omit it. */
@@ -284,7 +286,7 @@ export const requestComposerFocus = (
 
 export const requestComposerInsert = (
   text: string,
-  { mode = 'block', target = 'active' }: { mode?: ComposerInsertMode; target?: ComposerTarget | 'active' } = {}
+  { mode = 'block', target = 'active', visibleOnly }: { mode?: ComposerInsertMode; target?: ComposerTarget | 'active'; visibleOnly?: boolean } = {}
 ) => {
   const trimmed = text.trim()
 
@@ -292,7 +294,7 @@ export const requestComposerInsert = (
     return
   }
 
-  dispatch<InsertDetail>(INSERT_EVENT, { mode, target: resolve(target), text: trimmed })
+  dispatch<InsertDetail>(INSERT_EVENT, { mode, target: resolve(target), text: trimmed, visibleOnly })
 }
 
 /** Acked insert for the plugin SDK (`host.composer.insertText`).

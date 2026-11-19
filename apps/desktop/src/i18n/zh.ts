@@ -4318,6 +4318,8 @@ export const zhOverrides = {
       refresh: '刷新',
       moreActions: '更多操作',
       branchNewChat: '在新对话中分支',
+      replyToMessage: '回复消息',
+      replyTemplate: quote => `回复 Hermes：\n${quote}\n\n我的回复：`,
       react: '回应',
       dismissError: '关闭错误',
       errorGenericProvider: 'AI 服务',

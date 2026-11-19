@@ -31,6 +31,12 @@ class TestBuildLocalTranscribeKwargs:
         assert kwargs["vad_filter"] is True
         assert kwargs["vad_parameters"] == {"min_silence_duration_ms": 500}
 
+    def test_beam_size_defaults_to_one_and_is_configurable(self):
+        assert build_local_transcribe_kwargs({})["beam_size"] == 1
+        assert build_local_transcribe_kwargs({"local": {"beam_size": 5}})["beam_size"] == 5
+        assert build_local_transcribe_kwargs({"local": {"beam_size": 99}})["beam_size"] == 5
+        assert build_local_transcribe_kwargs({"local": {"beam_size": 0}})["beam_size"] == 1
+
     def test_conditioning_always_off(self):
         assert build_local_transcribe_kwargs({})["condition_on_previous_text"] is False
         assert (
