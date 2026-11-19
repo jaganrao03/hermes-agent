@@ -439,6 +439,8 @@ export const deOverrides = {
     errors: {
       elevenLabsNeedsKey: 'ElevenLabs-STT braucht ELEVENLABS_API_KEY.',
       elevenLabsRejectedKey: 'ElevenLabs hat den API-Key abgelehnt (401).',
+      runtimeCoordinationRequired:
+        'Dieser Chat ist in einem anderen Hermes-Fenster oder Terminal geöffnet und kann hier noch nicht fortgesetzt werden. Schließen Sie ihn dort und versuchen Sie es erneut, oder starten Sie einen neuen Chat.',
       diskFull: 'Festplatte voll – geben Sie Speicherplatz frei und versuchen Sie es dann erneut.',
       storageFailure:
         'Hermes konnte nicht in seinen Datenordner speichern. Öffnen Sie die Wartung, um das Problem zu prüfen und zu beheben.',
@@ -5114,6 +5116,7 @@ export const deOverrides = {
       preparingAudio: 'Bereitet Audio vor...',
       stopReading: 'Vorlesen stoppen',
       readAloud: 'Vorlesen',
+      askAboutThis: 'Dazu fragen',
       copyFullResponse: 'Vollständige Antwort kopieren',
       readAloudFullResponseHint: 'Umschalt-Klick: vollständige Antwort vorlesen',
       contentRefusedNotice: 'Diese Nachricht wurde vom Sicherheitsfilter des Modells abgelehnt – versuche eine andere Anfrage.',

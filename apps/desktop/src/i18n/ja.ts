@@ -145,6 +145,8 @@ export const jaOverrides = {
     errors: {
       elevenLabsNeedsKey: 'ElevenLabs STT には ELEVENLABS_API_KEY が必要です。',
       elevenLabsRejectedKey: 'ElevenLabs が API キーを拒否しました (401)。',
+      runtimeCoordinationRequired:
+        'このチャットは別の Hermes ウィンドウまたはターミナルで開かれているため、ここではまだ再開できません。そちらを閉じてからもう一度お試しいただくか、新しいチャットを開始してください。',
       diskFull: 'ディスク容量不足です — 空きを作ってからもう一度お試しください。',
       gatewayAuthFailed: 'ゲートウェイ認証に失敗しました — API_SERVER_KEY を確認してください。',
       methodNotAllowed:
@@ -3445,6 +3447,7 @@ export const jaOverrides = {
       preparingAudio: '音声を準備中...',
       stopReading: '読み上げを停止',
       readAloud: '読み上げ',
+      askAboutThis: 'これについて質問',
       copyFullResponse: '回答全体をコピー',
       readAloudFullResponseHint: 'Shiftを押しながらクリック: 回答全体を読み上げ',
       contentRefusedNotice: 'このメッセージはモデルの安全フィルターによって拒否されました。別の内容でお試しください。',

@@ -21,7 +21,7 @@ import { $connection } from '@/store/session'
 
 import { useComposerActions } from '../../hooks/use-composer-actions'
 import type { QueueEditState } from '../composer-utils'
-import { type ComposerTarget, getActiveComposer, markActiveComposer } from '../focus'
+import { type ComposerTarget, getActiveComposer, markActiveComposer, requestComposerInsert } from '../focus'
 import { caretOffsetInEditor, composerPlainText } from '../rich-editor'
 import { type ComposerScope, ComposerScopeProvider, MAIN_COMPOSER_SCOPE } from '../scope'
 
@@ -895,5 +895,28 @@ describe('useComposerDraft — touch never re-enters the editor on its own', () 
     act(() => draft.focusInput())
     act(() => draft.clearDraft())
     expect(draft.editorRef.current?.contains(window.getSelection()?.anchorNode ?? null)).toBe(true)
+  })
+})
+
+describe('useComposerDraft — external prompt suggestions', () => {
+  afterEach(() => {
+    cleanup()
+    clearSessionDraft('follow-up-draft')
+    mainComposerScope.clear()
+    markActiveComposer('main')
+    mockComposerApi.setText.mockReset()
+  })
+
+  it('inserts a suggestion after existing draft text so the user can edit both before sending', async () => {
+    stashSessionDraft('follow-up-draft', 'My extra note', [])
+    render(<ProbeHarness activeQueueSessionKey="follow-up-draft" onLayoutSnapshot={() => undefined} sessionId="follow-up-draft" />)
+    mockComposerApi.setText.mockClear()
+
+    await act(async () => {
+      requestComposerInsert('Show an example', { mode: 'block', target: 'main' })
+      await new Promise(resolve => window.setTimeout(resolve, 0))
+    })
+
+    expect(mockComposerApi.setText).toHaveBeenLastCalledWith('My extra note\n\nShow an example')
   })
 })

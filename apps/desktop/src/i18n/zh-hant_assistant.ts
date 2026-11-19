@@ -274,6 +274,7 @@ export const zhHantAssistant = {
       preparingAudio: '正在準備音訊...',
       stopReading: '停止朗讀',
       readAloud: '朗讀',
+      askAboutThis: '詢問這段內容',
       copyFullResponse: '複製完整回覆',
       readAloudFullResponseHint: '按住 Shift 點擊：朗讀完整回覆',
       contentRefusedNotice: '此訊息被模型的安全篩選器拒絕 — 請改用其他問題重試。',

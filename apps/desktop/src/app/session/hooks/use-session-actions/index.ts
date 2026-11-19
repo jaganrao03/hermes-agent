@@ -43,7 +43,7 @@ import { pendingSessionReplay, requestGatewayForAgent, retainGatewayForAgent } f
 import { $gatewaySwitching } from '@/store/gateway-switch'
 import { clearSessionGoal } from '@/store/goals'
 import { $pinnedSessionIds } from '@/store/layout'
-import { clearNotifications, notify, notifyError } from '@/store/notifications'
+import { clearNotifications, isRuntimeCoordinationRefusal, notify, notifyError } from '@/store/notifications'
 import { adoptDraftPreviewTabs, prunePreviewTabsForSession } from '@/store/preview'
 import {
   $activeGatewayProfile,
@@ -88,6 +88,7 @@ import {
   setIntroSeed,
   setMessages,
   setNewChatWorkspaceTarget,
+  setResumeExhaustedSessionId,
   setResumeFailedSessionId,
   setResumeReattachSessionId,
   setSelectedStoredSessionId,
@@ -2497,7 +2498,14 @@ export function useSessionActions({
           return
         }
 
-        if (viewMessagesForReconcile().length === 0) {
+        if (isRuntimeCoordinationRefusal(err)) {
+          // Another Hermes process holds this chat; the lease clears when it lets go, not on its
+          // own, so neither self-heal can help. An empty window goes straight to the exhausted
+          // overlay (Start new session + manual Retry); a readable one keeps its history.
+          if (viewMessagesForReconcile().length === 0) {
+            setResumeExhaustedSessionId(storedSessionId)
+          }
+        } else if (viewMessagesForReconcile().length === 0) {
           // Arm the self-heal ONLY when the window is still empty: the gateway
           // resume rejected AND the REST fallback failed to paint a transcript.
           // A durable cached-tail paint counts as EMPTY here — it's provisional

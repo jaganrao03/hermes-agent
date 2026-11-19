@@ -38,6 +38,8 @@ export const zhHantDiagnostics = {
     errors: {
       elevenLabsNeedsKey: 'ElevenLabs STT 需要 ELEVENLABS_API_KEY。',
       elevenLabsRejectedKey: 'ElevenLabs 拒絕了該 API 金鑰 (401)。',
+      runtimeCoordinationRequired:
+        '此聊天正在另一個 Hermes 視窗或終端機中開啟，暫時無法在這裡恢復。請先在那邊關閉後重試，或開始新的聊天。',
       diskFull: '磁碟已滿 — 請騰出一些空間後再試。',
       gatewayAuthFailed: '閘道認證失敗 — 請檢查你的 API_SERVER_KEY。',
       methodNotAllowed: '桌面後端拒絕了該請求 (405 Method Not Allowed)。請嘗試重新啟動 Hermes Desktop。',

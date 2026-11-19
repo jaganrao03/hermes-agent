@@ -30,11 +30,12 @@ import {
   messageContentText,
   pickPrimaryPreviewTarget
 } from '@/components/assistant-ui/thread/content'
-import { buildFollowupContext, FollowUpSuggestions } from '@/components/assistant-ui/thread/follow-up-suggestions'
+import { FollowUpSuggestions } from '@/components/assistant-ui/thread/follow-up-suggestions'
 import { MessageHoverTime } from '@/components/assistant-ui/thread/message-hover-time'
 import { MESSAGE_PARTS_COMPONENTS } from '@/components/assistant-ui/thread/message-parts'
 import { ReactionPicker } from '@/components/assistant-ui/thread/message-reactions'
 import { ResponseMessageIds } from '@/components/assistant-ui/thread/response-group'
+import { SelectToAsk } from '@/components/assistant-ui/thread/select-to-ask'
 import { ResponseLoadingIndicator, TurnActivityIndicator } from '@/components/assistant-ui/thread/status'
 import { threadMessageIndex } from '@/components/assistant-ui/thread/thread-message-index'
 import { MessageTimelineTimestamp } from '@/components/assistant-ui/thread/timeline-timestamp'
@@ -246,6 +247,7 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
   // the preview block, or this root.
   const hasVisibleText = useAuiState(s => contentHasVisibleText(s.message.content))
   const isRunning = useAuiState(s => s.message.status?.type === 'running')
+  const isLastMessage = useAuiState(s => s.thread.messages.at(-1)?.id === s.message.id)
   const sessionId = useStore(useSessionView().$runtimeId)
   const approval = useStore(useMemo(() => sessionApprovalRequest(sessionId), [sessionId]))
 
@@ -327,6 +329,7 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
           >
             {/* Todos render in the composer status stack now, not inline. */}
             {MESSAGE_PARTS}
+            <SelectToAsk />
             <StoppedNotice />
             <AssistantStatusSlot />
             <AssistantPreviewEmbeds />
@@ -352,8 +355,8 @@ const AssistantMessageBody: FC<AssistantMessageProps & { collapsedNotice?: null 
                   messageId={messageId}
                   onBranchInNewChat={onBranchInNewChat}
                 />
-                {!isInterim && !isRunning && (
-                  <FollowUpSuggestions context={buildFollowupContext(threadRuntime.getState().messages)} responseId={messageId} />
+                {isLastMessage && !isInterim && !isRunning && (
+                  <FollowUpSuggestions sessionId={sessionId ?? ''} />
                 )}
               </>
             )}

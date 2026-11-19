@@ -1,27 +1,16 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildFollowupContext, parseFollowupSuggestions } from './follow-up-suggestions'
+import { parseNextPromptSuggestion } from './follow-up-suggestions'
 
-describe('buildFollowupContext', () => {
-  it('keeps recent user and assistant text while excluding tool messages', () => {
-    expect(buildFollowupContext([
-      { role: 'user', content: [{ type: 'text', text: 'Explain this' }] },
-      { role: 'tool', content: [{ type: 'text', text: 'internal result' }] },
-      { role: 'assistant', content: [{ type: 'text', text: 'Here is the explanation.' }] }
-    ])).toBe('user: Explain this\nassistant: Here is the explanation.')
-  })
-})
-
-describe('parseFollowupSuggestions', () => {
-  it('keeps up to three distinct, trimmed, bounded strings from a JSON array', () => {
-    expect(parseFollowupSuggestions(JSON.stringify(['  Explain this  ', 'Show an example', 'Explain this', '', 4, 'x'.repeat(121)]))).toEqual([
-      'Explain this',
-      'Show an example'
-    ])
+describe('parseNextPromptSuggestion', () => {
+  it('returns a trimmed, bounded cached suggestion from the plugin response', () => {
+    expect(parseNextPromptSuggestion({ suggestion: { text: '  Show an example  ' } })).toBe('Show an example')
+    expect(parseNextPromptSuggestion({ suggestion: { text: 'x'.repeat(121) } })).toBe('')
   })
 
-  it('fails closed for malformed or non-array output', () => {
-    expect(parseFollowupSuggestions('not json')).toEqual([])
-    expect(parseFollowupSuggestions('{"suggestions":["one"]}')).toEqual([])
+  it('returns empty when the plugin has no suggestion or an invalid response', () => {
+    expect(parseNextPromptSuggestion({ suggestion: null })).toBe('')
+    expect(parseNextPromptSuggestion({})).toBe('')
+    expect(parseNextPromptSuggestion(null)).toBe('')
   })
 })

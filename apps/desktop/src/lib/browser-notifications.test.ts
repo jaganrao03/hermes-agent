@@ -2,13 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { onBrowserFocusSession, showBrowserNotification } from './browser-notifications'
 
-const created: { onclick: (() => void) | null; title: string }[] = []
+const created: { body?: string; onclick: (() => void) | null; title: string }[] = []
 
 class FakeNotification {
   static permission: NotificationPermission = 'default'
   static requestPermission = vi.fn(async () => FakeNotification.permission)
   onclick: (() => void) | null = null
-  constructor(public title: string) {
+  body?: string
+  constructor(public title: string, options?: { body?: string }) {
+    this.body = options?.body
     created.push(this)
   }
   close() {}
@@ -48,5 +50,40 @@ describe('showBrowserNotification', () => {
     expect(focus).toHaveBeenCalled()
     expect(opened).toEqual(['stored-1'])
     off()
+  })
+
+  it('never puts chat names or reply text into an OS notification', () => {
+    FakeNotification.permission = 'granted'
+
+    showBrowserNotification({
+      body: 'The production password is hunter2',
+      focusSessionId: 'stored-1',
+      kind: 'turnDone',
+      sessionId: 'rt-1',
+      title: 'Fix payroll leak — Hermes finished'
+    })
+
+    expect(created[0].title).toBe('Hermes finished')
+    expect(created[0].body).toBe('Message complete.')
+    expect(JSON.stringify(created)).not.toMatch(/hunter2|payroll/)
+  })
+
+  it('routes through the service worker when one is registered, carrying only the session id', async () => {
+    FakeNotification.permission = 'granted'
+    const showNotification = vi.fn(async () => undefined)
+    const registerWorker = await import('./service-worker')
+    vi.spyOn(registerWorker, 'notificationWorkerRegistration').mockReturnValue({ showNotification } as never)
+
+    expect(
+      showBrowserNotification({ body: 'secret preview', focusSessionId: 'stored-9', kind: 'approval', title: 'Approval needed — Private chat' })
+    ).toBe(true)
+
+    expect(created).toHaveLength(0)
+    expect(showNotification).toHaveBeenCalledWith('Approval needed', {
+      body: undefined,
+      data: { sessionId: 'stored-9' },
+      tag: 'hermes:approval:stored-9'
+    })
+    vi.restoreAllMocks()
   })
 })

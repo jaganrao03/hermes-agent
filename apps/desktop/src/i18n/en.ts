@@ -430,6 +430,8 @@ export const en: Translations = {
     errors: {
       elevenLabsNeedsKey: 'Voice input needs an ElevenLabs key. Add one in Settings → Keys.',
       elevenLabsRejectedKey: "ElevenLabs didn't accept your API key. Update it in Settings → Keys, then try again.",
+      runtimeCoordinationRequired:
+        "This chat is open in another Hermes window or terminal, so it can't be resumed here yet. Close it there and retry, or start a new chat.",
       diskFull: 'Disk full — free some space, then try again.',
       storageFailure: "Hermes couldn't save to its data folder. Open Maintenance to check and repair it.",
       gatewayAuthFailed:
@@ -4542,6 +4544,7 @@ export const en: Translations = {
       preparingAudio: 'Preparing audio...',
       stopReading: 'Stop reading',
       readAloud: 'Read aloud',
+      askAboutThis: 'Ask about this',
       copyFullResponse: 'Copy full response',
       readAloudFullResponseHint: 'Shift-click: read the full response',
       editMessage: 'Edit message',

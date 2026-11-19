@@ -135,6 +135,8 @@ export const ruOverrides = {
     errors: {
       elevenLabsNeedsKey: 'Для STT ElevenLabs нужен ELEVENLABS_API_KEY.',
       elevenLabsRejectedKey: 'ElevenLabs отклонил API-ключ (401).',
+      runtimeCoordinationRequired:
+        'Этот чат открыт в другом окне или терминале Hermes, поэтому пока не может быть возобновлён здесь. Закройте его там и повторите попытку или начните новый чат.',
       diskFull: 'Диск заполнен — освободите место и повторите.',
       gatewayAuthFailed: 'Аутентификация шлюза не удалась — проверьте API_SERVER_KEY.',
       methodNotAllowed:
@@ -3586,6 +3588,7 @@ export const ruOverrides = {
       preparingAudio: 'Подготовка аудио...',
       stopReading: 'Остановить чтение',
       readAloud: 'Зачитать вслух',
+      askAboutThis: 'Спросить об этом',
       copyFullResponse: 'Копировать весь ответ',
       readAloudFullResponseHint: 'Shift+клик: прочитать весь ответ',
       contentRefusedNotice: 'Это сообщение отклонено фильтром безопасности модели — попробуйте другой запрос.',

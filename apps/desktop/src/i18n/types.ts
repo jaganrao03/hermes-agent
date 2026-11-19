@@ -462,6 +462,7 @@ export interface Translations extends NoticeTranslations {
     errors: {
       elevenLabsNeedsKey: string
       elevenLabsRejectedKey: string
+      runtimeCoordinationRequired: string
       diskFull: string
       storageFailure: string
       gatewayAuthFailed: string
@@ -4036,6 +4037,7 @@ export interface Translations extends NoticeTranslations {
       preparingAudio: string
       stopReading: string
       readAloud: string
+      askAboutThis: string
       copyFullResponse: string
       readAloudFullResponseHint: string
       editMessage: string

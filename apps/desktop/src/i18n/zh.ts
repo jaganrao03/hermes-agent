@@ -232,6 +232,8 @@ export const zhOverrides = {
     errors: {
       elevenLabsNeedsKey: 'ElevenLabs STT 需要 ELEVENLABS_API_KEY。',
       elevenLabsRejectedKey: 'ElevenLabs 拒绝了该 API key (401)。',
+      runtimeCoordinationRequired:
+        '此聊天正在另一个 Hermes 窗口或终端中打开，暂时无法在这里恢复。请先在那边关闭后重试，或开始新的聊天。',
       diskFull: '磁盘已满 — 请腾出一些空间后再试。',
       gatewayAuthFailed: '网关认证失败 — 请检查你的 API_SERVER_KEY。',
       methodNotAllowed: '桌面后端拒绝了该请求 (405 Method Not Allowed)。请尝试重启 Hermes Desktop。',
@@ -4416,6 +4418,7 @@ export const zhOverrides = {
       preparingAudio: '正在准备音频...',
       stopReading: '停止朗读',
       readAloud: '朗读',
+      askAboutThis: '询问这段内容',
       copyFullResponse: '复制完整回复',
       readAloudFullResponseHint: '按住 Shift 点击：朗读完整回复',
       contentRefusedNotice: '该消息被模型的安全过滤器拒绝 — 请换一个问题重试。',

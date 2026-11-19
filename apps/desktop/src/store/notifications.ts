@@ -268,6 +268,20 @@ function isLaunchCredentialsRefusal(error: unknown): boolean {
   return error instanceof Error && error.message.trim() === 'launch_credentials_unavailable'
 }
 
+// A chat another Hermes process still holds (a live CLI lease, an A2A-forwarded history) refuses to
+// resume or mutate with `runtime_coordination_required` (gateway/session_local_migration.py and the
+// state mutation paths): `data.reason` on an RPC error, or the bare code once a transport flattened
+// it. The lease clears when that process lets go, never on its own, so a retry loop only repeats it.
+export function isRuntimeCoordinationRefusal(error: unknown): boolean {
+  const data = error && typeof error === 'object' ? (error as { data?: { reason?: unknown } }).data : undefined
+
+  if (data && typeof data === 'object' && data.reason === 'runtime_coordination_required') {
+    return true
+  }
+
+  return error instanceof Error && error.message.trim() === 'runtime_coordination_required'
+}
+
 // Exported so flows that surface errors inline (e.g. ConfirmDialog's onConfirm
 // rethrow) can reuse the same IPC-unwrapping + summarizing as notifyError.
 export function readableError(
@@ -287,6 +301,18 @@ export function readableError(
     // this chat repeats the refusal until the user starts a new one.
     return {
       message: translateNow('assistant.thread.errorCodes.launch_credentials_unavailable.body'),
+      action: {
+        label: translateNow('assistant.thread.errorStartNewSession'),
+        onClick: () => void import('@/store/profile').then(({ requestFreshSession }) => requestFreshSession())
+      },
+      category: 'other'
+    }
+  }
+
+  if (isRuntimeCoordinationRefusal(error)) {
+    // A new chat is the way out that works now; Retry stays on the chat's own overlay.
+    return {
+      message: translateNow('notifications.errors.runtimeCoordinationRequired'),
       action: {
         label: translateNow('assistant.thread.errorStartNewSession'),
         onClick: () => void import('@/store/profile').then(({ requestFreshSession }) => requestFreshSession())

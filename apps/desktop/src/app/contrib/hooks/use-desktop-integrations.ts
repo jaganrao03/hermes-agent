@@ -50,6 +50,7 @@ import { requestComposerFocus, requestComposerInsert } from '../../chat/composer
 import { appViewForPath, isOverlayView, NEW_CHAT_ROUTE, routeSessionId, sessionRoute } from '../../routes'
 
 import { resolveRememberedSessionId } from './remembered-session'
+import { useShareTarget } from './use-share-target'
 
 // Trailing window that folds a burst of kept-route opens into one list refresh.
 const KEPT_ROUTE_REFRESH_COALESCE_MS = 400
@@ -121,6 +122,8 @@ export function useDesktopIntegrations({
   }, [])
 
   const restoredRef = useRef(false)
+  // BEFORE the restore effect below: a share claims the cold-start latch first.
+  useShareTarget({ navigate, profileReady, restoredRef })
   const diskPluginsScanPending = useStore($diskPluginsScanPending)
 
   // Wait until boot has adopted the primary profile, then restore that profile's

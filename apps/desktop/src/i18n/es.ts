@@ -442,6 +442,8 @@ export const esOverrides = {
       elevenLabsNeedsKey: 'La entrada de voz necesita una clave de ElevenLabs. Añade una en Configuración → Claves.',
       elevenLabsRejectedKey:
         'ElevenLabs no aceptó tu clave API. Actualízala en Configuración → Claves e inténtalo de nuevo.',
+      runtimeCoordinationRequired:
+        'Este chat está abierto en otra ventana o terminal de Hermes, así que aún no se puede reanudar aquí. Ciérralo allí y vuelve a intentarlo, o inicia un chat nuevo.',
       diskFull: 'Disco lleno — libera espacio y vuelve a intentarlo.',
       storageFailure: 'Hermes no pudo guardar en su carpeta de datos. Abre Mantenimiento para comprobarla y repararla.',
       gatewayAuthFailed:
@@ -5097,6 +5099,7 @@ export const esOverrides = {
       preparingAudio: 'Preparando audio...',
       stopReading: 'Detener lectura',
       readAloud: 'Leer en voz alta',
+      askAboutThis: 'Preguntar sobre esto',
       copyFullResponse: 'Copiar la respuesta completa',
       readAloudFullResponseHint: 'Mayús+clic: leer la respuesta completa',
       contentRefusedNotice: 'El filtro de seguridad del modelo rechazó este mensaje: prueba con otra consulta.',

@@ -440,6 +440,8 @@ export const frOverrides = {
     errors: {
       elevenLabsNeedsKey: 'STT ElevenLabs nécessite ELEVENLABS_API_KEY.',
       elevenLabsRejectedKey: 'ElevenLabs a rejeté la clé API (401).',
+      runtimeCoordinationRequired:
+        'Cette conversation est ouverte dans une autre fenêtre ou un autre terminal Hermes, elle ne peut donc pas encore être reprise ici. Fermez-la là-bas puis réessayez, ou démarrez une nouvelle conversation.',
       diskFull: "Le disque est plein. Libérez de l'espace disque, puis réessayez.",
       storageFailure:
         "Hermes n'a pas pu enregistrer dans son dossier de données. Ouvrez Maintenance pour le vérifier et le réparer.",
@@ -5122,6 +5124,7 @@ export const frOverrides = {
       preparingAudio: "Préparation de l'audio…",
       stopReading: 'Arrêter la lecture',
       readAloud: 'Lire à voix haute',
+      askAboutThis: 'Poser une question à ce sujet',
       copyFullResponse: 'Copier la réponse complète',
       readAloudFullResponseHint: 'Maj+clic : lire la réponse complète',
       contentRefusedNotice: 'Ce message a été refusé par le filtre de sécurité du modèle — essayez une autre requête.',

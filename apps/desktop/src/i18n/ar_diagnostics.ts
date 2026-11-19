@@ -59,6 +59,8 @@ export const arDiagnostics = {
     errors: {
       elevenLabsNeedsKey: 'يتطلب ElevenLabs STT المفتاح ELEVENLABS_API_KEY.',
       elevenLabsRejectedKey: 'رفض ElevenLabs مفتاح API (401).',
+      runtimeCoordinationRequired:
+        'هذه المحادثة مفتوحة في نافذة أو طرفية Hermes أخرى، لذا لا يمكن استئنافها هنا الآن. أغلقها هناك ثم أعد المحاولة، أو ابدأ محادثة جديدة.',
       diskFull: 'القرص ممتلئ — حرّر مساحة ثم أعد المحاولة.',
       methodNotAllowed: 'رفضت خلفية سطح المكتب هذا الطلب (405 Method Not Allowed). جرب إعادة تشغيل Hermes Desktop.',
       microphonePermission: 'تم رفض إذن الميكروفون.',

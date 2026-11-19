@@ -226,3 +226,26 @@ test('a launch-credentials refusal says the key changed and offers a new chat', 
   notifyError(new Error('launch_credentials_unavailable'), en.desktop.modelSwitchFailed)
   expect(lastMessage()).toBe(en.assistant.thread.errorCodes.launch_credentials_unavailable.body)
 })
+
+// A chat another Hermes process still holds (a live CLI lease, an A2A-forwarded history) refuses to
+// resume with the bare `runtime_coordination_required` code. The toast says what is going on in plain
+// words and offers the way out that works: a new chat. It never shows the raw code.
+test('a runtime-coordination refusal explains the held chat and offers a new chat', () => {
+  notifyError(
+    new JsonRpcGatewayError('runtime_coordination_required', {
+      code: 4090,
+      data: { reason: 'runtime_coordination_required' }
+    }),
+    en.desktop.resumeFailed
+  )
+
+  const toast = $notifications.get()[0]
+  expect(toast?.message).toBe(en.notifications.errors.runtimeCoordinationRequired)
+  expect(toast?.message).not.toContain('runtime_coordination_required')
+  expect(toast?.action?.label).toBe(en.assistant.thread.errorStartNewSession)
+
+  // Transports that flatten the error keep only the code in the message.
+  clearNotifications()
+  notifyError(new Error('runtime_coordination_required'), en.desktop.resumeFailed)
+  expect(lastMessage()).toBe(en.notifications.errors.runtimeCoordinationRequired)
+})
