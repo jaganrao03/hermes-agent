@@ -316,6 +316,34 @@ def test_worker_sync_reuses_unions_and_reports_real_lock_drift(locked_project, b
     assert not {"base_dep", "chosen_dep", "other_dep"} & sys.modules.keys()
 
 
+def test_sync_recovers_when_recorded_workspace_lock_was_pruned(locked_project, build_worker, tmp_path, monkeypatch):
+    """A removed old generation lock must not block rebuilding from the project lock."""
+    import pm
+    from pm.environments import runtime_facts_path, selected_venv
+    from pm.lock import Facts
+    from pm import paths
+
+    source, _, env = locked_project
+    monkeypatch.setattr(paths, "repo_root", lambda: source)
+    pm.lock_project(source, offline=True, explicit=True)
+    plugins = Members([source / "member"])
+    pm.sync_venv(["chosen"], explicit=True, plugins=plugins)
+    prior = Facts(runtime_facts_path(source)).get("venv")
+    assert prior is not None
+    workspace = Path(prior["resolved_lock"]).parent
+    assert (workspace / "uv.lock").is_file()
+
+    monkeypatch.chdir(tmp_path)
+    shutil.rmtree(workspace)
+    pm.sync_venv(["other"], explicit=True, plugins=plugins)
+
+    current = Facts(runtime_facts_path(source)).get("venv")
+    assert current is not None and Path(current["resolved_lock"]).is_file()
+    python = selected_venv(source) / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    assert _run([str(python), "-I", "-c", "import chosen_dep, other_dep, member_dep; print('ok')"],
+                cwd=tmp_path, env=env) == "ok"
+
+
 @pytest.mark.parametrize("operation", ["sync", "requirements", "application"])
 def test_build_backend_output_is_streamed_before_build_finishes(installable_project, tmp_path, monkeypatch, operation):
     import io

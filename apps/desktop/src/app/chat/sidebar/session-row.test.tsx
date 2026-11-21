@@ -57,7 +57,9 @@ vi.mock('@/i18n', () => ({
   })
 }))
 
-vi.mock('@/app/chat/profile-tag', () => ({ ProfileTag: () => null }))
+vi.mock('@/app/chat/profile-tag', () => ({
+  ProfileTag: ({ profile }: { profile?: string | null }) => <span data-testid="profile-tag">{profile ?? 'default'}</span>
+}))
 vi.mock('@/app/chat/session-drag', () => ({ startSessionDrag: vi.fn() }))
 // PlatformAvatar is intentionally NOT mocked (do not reintroduce this — see
 // #67500, Gille's third pass): it's a forwardRef component that spreads its
@@ -447,6 +449,30 @@ describe('SidebarSessionRow inside the sortable list', () => {
 // Row-decoration slots: a plugin decorates rows through the registry with the
 // row's stored session id handed to its render — the seam the session-list API
 // pairs with (see #116305 item 3).
+describe('SidebarSessionRow profile ownership badges', () => {
+  it('shows the assigned profile for every source, including default', () => {
+    const sources = [
+      'cli', 'tui', 'telegram', 'discord', 'slack', 'whatsapp', 'whatsapp_cloud', 'signal',
+      'matrix', 'email', 'sms', 'cron', 'tool', 'oneshot', 'api_server', 'acp', 'hermes_flow',
+      'vulcan_delegate', 'webhook'
+    ]
+
+    for (const source of sources) {
+      for (const profile of ['default', `profile-${source}`]) {
+        const { unmount } = renderRow(makeSession({
+          id: `sid-${source}-${profile}`,
+          profile,
+          source,
+          title: `${source} ${profile}`
+        }))
+
+        expect(screen.getByTestId('profile-tag').textContent).toBe(profile)
+        unmount()
+      }
+    }
+  })
+})
+
 describe('SidebarSessionRow decoration slots', () => {
   const disposers: Array<() => void> = []
 
