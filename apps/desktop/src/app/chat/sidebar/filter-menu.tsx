@@ -140,8 +140,7 @@ export function SidebarFilterMenu({ className }: { className?: string }) {
     { icon: 'comment', id: 'preview', label: f.preview },
     { icon: 'symbol-numeric', id: 'tokens', label: f.tokens },
     { icon: 'credit-card', id: 'cost', label: f.cost },
-    { icon: 'git-pull-request', id: 'pr', label: f.pr },
-    { icon: 'account', id: 'profile', label: f.profile }
+    { icon: 'git-pull-request', id: 'pr', label: f.pr }
   ]
 
   const PR_FILTERS: Option<PullRequestBucket>[] = [

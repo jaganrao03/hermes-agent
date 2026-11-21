@@ -141,6 +141,59 @@ class TestSidebarScope:
         assert _slice_ids(payload, "messaging") == {"default-telegram", "worker-telegram"}
         assert {row["profile"] for row in payload["messaging"]["sessions"]} == {"default", "worker"}
 
+    def test_all_sidebar_sources_are_tagged_with_the_database_owner(self, client, profiles_on_disk):
+        """Source taxonomy controls the slice; profile ownership comes from the DB being read."""
+        sources_by_slice = {
+            "messaging": ("telegram", "discord"),
+            "recents": ("api_server", "cli"),
+            "cron": ("cron",),
+        }
+        expected = {}
+        for profile, home in profiles_on_disk.items():
+            for source_names in sources_by_slice.values():
+                for source in source_names:
+                    session_id = f"{profile}-{source}"
+                    _seed_session(home, session_id, source=source)
+                    expected[session_id] = profile
+
+        payload = client.get(
+            "/api/profiles/sessions/sidebar",
+            params={"recents_profile": "all", "recents_exclude": "telegram,discord,cron",
+                    "messaging_exclude": "api_server,cli,cron"},
+        ).json()
+
+        actual = {
+            row["id"]: row["profile"]
+            for slice_name in ("recents", "messaging", "cron")
+            for row in payload[slice_name]["sessions"]
+        }
+        for slice_name, source_names in sources_by_slice.items():
+            assert {row["source"] for row in payload[slice_name]["sessions"]} == set(source_names)
+        assert payload["errors"] == []
+        assert actual == expected
+        assert all(
+            row["is_default_profile"] == (row["profile"] == "default")
+            for slice_name in ("recents", "messaging", "cron")
+            for row in payload[slice_name]["sessions"]
+        )
+
+    def test_session_list_tags_each_source_with_requested_profile(self, client, profiles_on_disk):
+        sources = ("telegram", "api_server", "cron", "cli", "discord")
+        for profile, home in profiles_on_disk.items():
+            for source in sources:
+                _seed_session(home, f"{profile}-{source}", source=source)
+
+        for profile in profiles_on_disk:
+            response = client.get(
+                "/api/sessions",
+                params={"profile": profile, "sources": ",".join(sources), "limit": 100},
+            )
+            assert response.status_code == 200
+            rows = response.json()["sessions"]
+            assert {row["source"] for row in rows} == set(sources)
+            assert {row["profile"] for row in rows} == {profile}
+            assert {row["is_default_profile"] for row in rows} == {profile == "default"}
+
 
 class TestCrossProfileProjectTree:
 

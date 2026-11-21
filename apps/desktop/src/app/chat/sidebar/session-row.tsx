@@ -27,7 +27,6 @@ import { coarseElapsed } from '@/lib/time'
 import { useStoreSelector } from '@/lib/use-session-slice'
 import { cn } from '@/lib/utils'
 import { $sidebarRowMeta } from '@/store/layout'
-import { normalizeProfileKey } from '@/store/profile'
 import { $projects } from '@/store/projects'
 import { $pullRequestsByBranch, sessionPrKey } from '@/store/pull-requests'
 import { sessionPinId } from '@/store/session'
@@ -75,9 +74,7 @@ interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
   reorderable?: boolean
   dragging?: boolean
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
-  /** Tag the row with its owning profile (initial chip + tooltip). Used by
-   *  flat cross-profile lists — Pinned and search results in the All-profiles
-   *  view — where no group header communicates ownership (#66003). */
+  /** Legacy compatibility prop; the profile badge is now always rendered. */
   showProfile?: boolean
   /** Inbox-style card: workspace header, title + last-message preview, and a
    *  model · size footer. The flat recents list opts in via the filter menu;
@@ -171,13 +168,10 @@ function SidebarSessionRowImpl({
   // Pinned metadata occupies the actions slot and swaps out for the kebab on
   // hover, so the row reserves the same width either way and never reflows.
   const pinnedAge = rowMeta.includes('updated')
-  // The default profile has no mark worth spending a row slot on — a chip on
-  // every row that says "the normal one" is noise. Named profiles only.
-  const hasProfileTag = normalizeProfileKey(session.profile) !== 'default'
-  const pinnedProfile = hasProfileTag && rowMeta.includes('profile')
-  // The branch's PR, if the row was asked to show one. A selector, not a plain
-  // useStore: a repo's PRs land as a single map write, and only the rows on
-  // those branches should repaint.
+  // Profile identity is always useful in the unified session list, including
+  // the default profile. Keep the prop for callers during the transition, but
+  // no longer make ownership labels opt-in.
+  void showProfile
   const prKey = sessionPrKey(session)
   const pr = useStoreSelector($pullRequestsByBranch, prs => (rowMeta.includes('pr') && prKey ? prs[prKey] : undefined))
   // Open in a pane, but not the focused one. A selector rather than a prop:
@@ -205,9 +199,7 @@ function SidebarSessionRowImpl({
   // to the left of the kebab's own column: never flush right, never swapping.
   const trailing: { key: string; node: React.ReactNode }[] = []
 
-  if ((showProfile || pinnedProfile) && hasProfileTag) {
-    trailing.push({ key: 'profile', node: <ProfileTag profile={session.profile} /> })
-  }
+  trailing.push({ key: 'profile', node: <ProfileTag profile={session.profile} /> })
 
   if (pr) {
     trailing.push({ key: 'pr', node: <PrTag pr={pr} /> })

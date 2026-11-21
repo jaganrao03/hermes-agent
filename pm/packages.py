@@ -566,7 +566,8 @@ class Venv(StatePackage):
                         or not recorded.is_file()):
                     raise InstallError(self.name, "recorded dependency lock is missing; refusing to drop plugins")
                 replay = recorded.parent
-            seed = (Path(prior["resolved_lock"]) if members and prior.get("resolved_lock")
+            previous_lock = Path(prior["resolved_lock"]) if prior.get("resolved_lock") else None
+            seed = (previous_lock if members and previous_lock is not None and previous_lock.is_file()
                     else project / "uv.lock")
             lock_and_sync(members, extras, root=generation / "workspace",
                           seed_lock=seed, frozen=repair or not members, replay=replay,
