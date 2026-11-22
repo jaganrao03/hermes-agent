@@ -103,6 +103,13 @@ def _seed_project(home, name, folder):
         return projects_db.create_project(conn, name=name, folders=[str(folder)])
 
 
+_ALL_SOURCES = (
+    "cli", "tui", "telegram", "discord", "slack", "whatsapp", "whatsapp_cloud", "signal",
+    "matrix", "email", "sms", "cron", "tool", "oneshot", "api_server", "acp", "hermes_flow",
+    "vulcan_delegate", "webhook",
+)
+
+
 def _slice_ids(payload, slice_name):
     return {row["id"] for row in payload[slice_name]["sessions"]}
 
@@ -177,8 +184,28 @@ class TestSidebarScope:
             for row in payload[slice_name]["sessions"]
         )
 
+    def test_sidebar_tags_every_session_source_with_the_database_owner(self, client, profiles_on_disk):
+        """All 19 sources, through the sidebar endpoint itself (not just /api/sessions)."""
+        for profile, home in profiles_on_disk.items():
+            for source in _ALL_SOURCES:
+                _seed_session(home, f"{profile}-{source}", source=source)
+
+        payload = client.get(
+            "/api/profiles/sessions/sidebar",
+            params={"recents_profile": "all", "recents_exclude": "cron", "recents_limit": 200,
+                    "messaging_exclude": "cli,cron", "messaging_limit": 200},
+        ).json()
+
+        assert payload["errors"] == []
+        rows = {row["id"]: row for slice_name in ("recents", "messaging") for row in payload[slice_name]["sessions"]}
+        rows.update({row["id"]: row for row in payload["cron"]["sessions"]})
+        expected = {f"{profile}-{source}": profile for profile in profiles_on_disk for source in _ALL_SOURCES}
+        assert {sid: row["profile"] for sid, row in rows.items()} == expected
+        assert {row["source"] for row in rows.values()} == set(_ALL_SOURCES)
+        assert all(row["is_default_profile"] == (row["profile"] == "default") for row in rows.values())
+
     def test_session_list_tags_each_source_with_requested_profile(self, client, profiles_on_disk):
-        sources = ("telegram", "api_server", "cron", "cli", "discord")
+        sources = _ALL_SOURCES
         for profile, home in profiles_on_disk.items():
             for source in sources:
                 _seed_session(home, f"{profile}-{source}", source=source)

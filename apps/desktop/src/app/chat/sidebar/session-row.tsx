@@ -74,7 +74,7 @@ interface SidebarSessionRowProps extends React.ComponentProps<'div'> {
   reorderable?: boolean
   dragging?: boolean
   dragHandleProps?: React.HTMLAttributes<HTMLElement>
-  /** Legacy compatibility prop; the profile badge is now always rendered. */
+  /** @deprecated Profile ownership badges are always rendered. */
   showProfile?: boolean
   /** Inbox-style card: workspace header, title + last-message preview, and a
    *  model · size footer. The flat recents list opts in via the filter menu;
@@ -137,7 +137,6 @@ function SidebarSessionRowImpl({
   reorderable = false,
   dragging = false,
   dragHandleProps,
-  showProfile = false,
   card = false,
   className,
   style,
@@ -168,10 +167,9 @@ function SidebarSessionRowImpl({
   // Pinned metadata occupies the actions slot and swaps out for the kebab on
   // hover, so the row reserves the same width either way and never reflows.
   const pinnedAge = rowMeta.includes('updated')
-  // Profile identity is always useful in the unified session list, including
-  // the default profile. Keep the prop for callers during the transition, but
-  // no longer make ownership labels opt-in.
-  void showProfile
+  // The branch's PR, if the row was asked to show one. A selector, not a plain
+  // useStore: a repo's PRs land as a single map write, and only the rows on
+  // those branches should repaint.
   const prKey = sessionPrKey(session)
   const pr = useStoreSelector($pullRequestsByBranch, prs => (rowMeta.includes('pr') && prKey ? prs[prKey] : undefined))
   // Open in a pane, but not the focused one. A selector rather than a prop:

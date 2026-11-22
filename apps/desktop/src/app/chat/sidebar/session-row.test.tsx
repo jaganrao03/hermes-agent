@@ -44,7 +44,8 @@ vi.mock('@/i18n', () => ({
           sessionActions: 'Session actions',
           sessionRunning: 'Running',
           todoProgress: 'Tasks completed',
-          waitingForAnswer: 'Waiting for answer'
+          waitingForAnswer: 'Waiting for answer',
+          ownedByProfile: (profile: string) => `Owned by ${profile}`
         }
       },
       assistant: {
@@ -57,9 +58,6 @@ vi.mock('@/i18n', () => ({
   })
 }))
 
-vi.mock('@/app/chat/profile-tag', () => ({
-  ProfileTag: ({ profile }: { profile?: string | null }) => <span data-testid="profile-tag">{profile ?? 'default'}</span>
-}))
 vi.mock('@/app/chat/session-drag', () => ({ startSessionDrag: vi.fn() }))
 // PlatformAvatar is intentionally NOT mocked (do not reintroduce this — see
 // #67500, Gille's third pass): it's a forwardRef component that spreads its
@@ -446,9 +444,6 @@ describe('SidebarSessionRow inside the sortable list', () => {
   })
 })
 
-// Row-decoration slots: a plugin decorates rows through the registry with the
-// row's stored session id handed to its render — the seam the session-list API
-// pairs with (see #116305 item 3).
 describe('SidebarSessionRow profile ownership badges', () => {
   it('shows the assigned profile for every source, including default', () => {
     const sources = [
@@ -466,13 +461,16 @@ describe('SidebarSessionRow profile ownership badges', () => {
           title: `${source} ${profile}`
         }))
 
-        expect(screen.getByTestId('profile-tag').textContent).toBe(profile)
+        expect(screen.getByRole('img', { name: `Owned by ${profile}` })).toBeTruthy()
         unmount()
       }
     }
   })
 })
 
+// Row-decoration slots: a plugin decorates rows through the registry with the
+// row's stored session id handed to its render — the seam the session-list API
+// pairs with (see #116305 item 3).
 describe('SidebarSessionRow decoration slots', () => {
   const disposers: Array<() => void> = []
 

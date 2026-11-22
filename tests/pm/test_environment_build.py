@@ -331,6 +331,7 @@ def test_sync_recovers_when_recorded_workspace_lock_was_pruned(locked_project, b
     prior = Facts(runtime_facts_path(source)).get("venv")
     assert prior is not None
     workspace = Path(prior["resolved_lock"]).parent
+    assert workspace.resolve().is_relative_to(tmp_path.resolve())
     assert (workspace / "uv.lock").is_file()
 
     monkeypatch.chdir(tmp_path)
@@ -339,6 +340,7 @@ def test_sync_recovers_when_recorded_workspace_lock_was_pruned(locked_project, b
 
     current = Facts(runtime_facts_path(source)).get("venv")
     assert current is not None and Path(current["resolved_lock"]).is_file()
+    assert Path(current["resolved_lock"]).parent != workspace
     python = selected_venv(source) / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
     assert _run([str(python), "-I", "-c", "import chosen_dep, other_dep, member_dep; print('ok')"],
                 cwd=tmp_path, env=env) == "ok"
