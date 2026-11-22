@@ -570,7 +570,7 @@ describe('ChatSidebar messaging owners', () => {
     expect(screen.getByText('desk')).toBeTruthy()
   })
 
-  it('tags rows with their profile under other groupings and stays flat when scoped to one profile', () => {
+  it('tags rows with their profile under other groupings, and still badges every row when scoped to one profile', () => {
     setShowAllProfiles(true)
     setSidebarGrouping('date')
     mount()
@@ -587,6 +587,7 @@ describe('ChatSidebar messaging owners', () => {
 
     expect(telegramGroups()).toHaveLength(0)
     expect(screen.queryByText('work-1')).toBeNull()
-    expect(within(row('default-1')).queryByRole('img', { name: /^Profile:/ })).toBeNull()
+    // Ownership badges are unconditional now, `default` included.
+    expect(within(row('default-1')).getByRole('img', { name: 'Profile: default' })).toBeTruthy()
   })
 })

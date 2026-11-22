@@ -98,6 +98,7 @@ vi.mock('@/i18n', () => ({
           backgroundRunning: 'Running in background',
           branchFrom: 'Branch from here',
           copyId: 'Copy ID',
+          ownedByProfile: (profile: string) => `Profile: ${profile}`,
           copyIdFailed: 'Failed to copy ID',
           deleteDesc: (title: string) => `Delete ${title}?`,
           deleteTitle: 'Delete session?',
