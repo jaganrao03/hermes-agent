@@ -1377,6 +1377,16 @@ class TestIsPaymentError:
             exc.status_code = status
         assert _is_payment_error(exc) is True
 
+    def test_codex_plan_window_spent_is_payment_not_rate_limit(self):
+        """A spent ChatGPT/Codex plan window (429 usage_limit_reached, reset days out) is quota
+        exhaustion: no same-credential backoff retry, and the provider is benched for later calls."""
+        exc = Exception(
+            "Error code: 429 - {'error': {'type': 'usage_limit_reached', 'message': "
+            "'The usage limit has been reached', 'plan_type': 'plus', 'resets_in_seconds': 238350}}"
+        )
+        exc.status_code = 429
+        assert _is_payment_error(exc) is True
+
     def test_403_subscription_required_is_payment(self):
         exc = Exception(
             "this model requires a subscription, upgrade for access: "

@@ -3193,6 +3193,9 @@ _PAYMENT_KEYWORDS = _BILLING_PATTERNS + (
     "too many tokens per day", "daily limit", "tokens per day", "daily quota", "resource exhausted",
     "resource_exhausted", "resource-exhausted", "resourceexhausted",
     "weekly usage limit", "weekly limit",
+    # ChatGPT/Codex plan windows: a spent window answers 429 ``usage_limit_reached`` with a reset hours
+    # or days out; retrying it just burns the backoff before the fallback chain runs.
+    "usage_limit_reached", "usage limit has been reached",
 )
 
 
