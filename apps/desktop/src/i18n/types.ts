@@ -3029,6 +3029,11 @@ export interface Translations extends NoticeTranslations {
     usageSession: string
     usageToday: string
     usageOffPeak: string
+    usageLimits: string
+    usageLimitsRefresh: string
+    usageLimitsLoading: string
+    usageLimitsError: string
+    usageLimitsNone: string
     pasteImage: string
     url: string
     promptSnippets: string

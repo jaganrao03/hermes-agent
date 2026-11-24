@@ -3,12 +3,14 @@ import { useMemo } from 'react'
 
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useI18n } from '@/i18n'
-import { Zap } from '@/lib/icons'
+import { Activity, Zap } from '@/lib/icons'
 import { isOffPeak, providerOfModel } from '@/lib/provider-offpeak'
 import { cn } from '@/lib/utils'
 import { $sessions } from '@/store/session'
 import { sessionCostUsd } from '@/store/sidebar-archive'
 import type { SessionInfo } from '@/types/hermes'
+
+import { UsageLimitsPanel } from './usage-limits-panel'
 
 /** Local midnight of `now`, in epoch seconds — the same clock the rows use. */
 function startOfTodaySeconds(now: Date = new Date()): number {
@@ -50,12 +52,9 @@ export function HeaderUsageChip({ session }: { session: SessionInfo | null }) {
   const sessionCost = session ? sessionCostUsd(session) : 0
   const todayCost = useMemo(() => spendToday(sessions), [sessions])
 
-  if (sessionCost <= 0 && todayCost <= 0) {
-    return null
-  }
-
   const discount = isOffPeak(session?.model)
   const provider = providerOfModel(session?.model)
+  const hasCost = sessionCost > 0 || todayCost > 0
   const headline = sessionCost > 0 ? usd(sessionCost) : usd(todayCost)
 
   return (
@@ -70,16 +69,18 @@ export function HeaderUsageChip({ session }: { session: SessionInfo | null }) {
           type="button"
         >
           {discount && <Zap className="size-2.5" />}
-          {headline}
+          {hasCost ? headline : <Activity className="size-3" />}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="end" className="w-56 p-2.5 text-xs" sideOffset={8}>
-        <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5">
-          <dt className="text-muted-foreground">{c.usageSession}</dt>
-          <dd className="text-right font-medium tabular-nums">{usd(sessionCost)}</dd>
-          <dt className="text-muted-foreground">{c.usageToday}</dt>
-          <dd className="text-right font-medium tabular-nums">{usd(todayCost)}</dd>
-        </dl>
+      <PopoverContent align="end" className="max-h-[70vh] w-64 overflow-y-auto p-2.5 text-xs" sideOffset={8}>
+        {hasCost && (
+          <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-1.5">
+            <dt className="text-muted-foreground">{c.usageSession}</dt>
+            <dd className="text-right font-medium tabular-nums">{usd(sessionCost)}</dd>
+            <dt className="text-muted-foreground">{c.usageToday}</dt>
+            <dd className="text-right font-medium tabular-nums">{usd(todayCost)}</dd>
+          </dl>
+        )}
         {discount && (
           <p className="mt-2 flex items-center gap-1.5 border-t border-border/50 pt-2 text-[0.68rem] text-muted-foreground">
             <Zap className="size-2.5 shrink-0" />
@@ -87,6 +88,7 @@ export function HeaderUsageChip({ session }: { session: SessionInfo | null }) {
             {provider ? ` · ${provider}` : ''}
           </p>
         )}
+        <UsageLimitsPanel />
       </PopoverContent>
     </Popover>
   )
