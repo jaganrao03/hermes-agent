@@ -1,6 +1,7 @@
 import { useStore } from '@nanostores/react'
 import { useEffect } from 'react'
 
+import { useSessionView } from '@/app/chat/session-view'
 import { donutFor, type LimitTone } from '@/app/chat/usage-limits-model'
 import { UsageLimitsPanel } from '@/app/chat/usage-limits-panel'
 import { Button } from '@/components/ui/button'
@@ -24,9 +25,13 @@ const TONE_STROKE: Record<LimitTone, string> = {
  * window is left, colored green → amber (≤20%) → red (≤10%). Click for every provider's windows,
  * reset times and API-key balances. Draws nothing when the provider reports no limits.
  */
-export function UsageDonut({ disabled, provider }: { disabled?: boolean; provider: string }) {
+export function UsageDonut({ disabled, provider: snapshotProvider }: { disabled?: boolean; provider: string }) {
   const { t } = useI18n()
   const state = useStore($usageLimits)
+  // The model pill falls back to the live session provider when the chat-bar snapshot has none yet;
+  // the donut must resolve the same provider or it vanishes exactly when the pill still shows one.
+  const viewProvider = useStore(useSessionView().$provider)
+  const provider = (snapshotProvider || viewProvider || '').trim()
 
   useEffect(() => {
     void loadUsageLimits()

@@ -1,6 +1,8 @@
 import { cleanup, render, screen } from '@testing-library/react'
+import { atom } from 'nanostores'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { PRIMARY_SESSION_VIEW, SessionViewProvider } from '@/app/chat/session-view'
 import { resetUsageLimits } from '@/store/usage-limits'
 
 import { UsageDonut } from './usage-donut'
@@ -50,5 +52,18 @@ describe('UsageDonut', () => {
     await vi.waitFor(() => expect(api).toHaveBeenCalled())
     await Promise.resolve()
     expect(screen.queryByTestId('usage-donut')).toBeNull()
+  })
+
+  it('falls back to the live session provider when the chat-bar snapshot has none', async () => {
+    api.mockResolvedValue({ providers: [row('openai-codex', 'OpenAI Codex', { windows: [win('Weekly', 0)] })] })
+    render(
+      <SessionViewProvider value={{ ...PRIMARY_SESSION_VIEW, $provider: atom('openai-codex') }}>
+        <UsageDonut provider="" />
+      </SessionViewProvider>
+    )
+
+    const button = await screen.findByTestId('usage-donut')
+
+    expect(button.getAttribute('aria-label')).toMatch(/OpenAI Codex: 0% left/)
   })
 })

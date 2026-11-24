@@ -149,7 +149,7 @@ export function ComposerControls({
           {hideModelPill ? null : (
             <>
               <ModelPill compact={compactModelPill} disabled={disabled} model={state.model} />
-              {compactModelPill ? null : <UsageDonut disabled={disabled} provider={state.model.provider} />}
+              <UsageDonut disabled={disabled} provider={state.model.provider} />
               {compactModelPill ? null : <ReasoningPill disabled={disabled} model={state.model} />}
             </>
           )}
