@@ -50,6 +50,51 @@ class DeepSeekProfile(ProviderProfile):
             return {"thinking": {"type": "disabled"}}, {}
         return extras, top_level
 
+    def fetch_account_usage(self, *, base_url: str | None = None, api_key: str | None = None):
+        """Prepaid balance via ``GET https://api.deepseek.com/user/balance``.
+
+        DeepSeek is pay-as-you-go: there are no percent windows, only a wallet. The literal host is
+        used (not the runtime base_url, which carries ``/v1`` and may be a proxy).
+        """
+        import httpx
+
+        from agent.account_usage import _snapshot
+        from hermes_cli.runtime_provider import resolve_runtime_provider
+
+        runtime = resolve_runtime_provider(requested=self.name, explicit_base_url=base_url, explicit_api_key=api_key)
+        token = str(runtime.get("api_key", "") or "").strip()
+        if not token:
+            return None
+        with httpx.Client(timeout=10.0) as client:
+            response = client.get(
+                "https://api.deepseek.com/user/balance",
+                headers={"Authorization": f"Bearer {token}", "Accept": "application/json"},
+            )
+            response.raise_for_status()
+        payload = response.json() or {}
+        details: list[str] = []
+        for info in payload.get("balance_infos") or []:
+            currency = str(info.get("currency") or "").upper()
+            symbol = {"USD": "$", "CNY": "¥"}.get(currency, f"{currency} ")
+            try:
+                total = float(info.get("total_balance"))
+            except (TypeError, ValueError):
+                continue
+            parts = [f"Balance: {symbol}{total:.2f}"]
+            for key, label in (("topped_up_balance", "topped up"), ("granted_balance", "granted")):
+                try:
+                    value = float(info.get(key))
+                except (TypeError, ValueError):
+                    continue
+                if value > 0:
+                    parts.append(f"{symbol}{value:.2f} {label}")
+            details.append(" • ".join(parts))
+        if payload.get("is_available") is False and details:
+            details.append("Status: API access unavailable — balance exhausted")
+        if not details:
+            return None
+        return _snapshot("deepseek", "balance_api", [], details, title="Account balance")
+
 
 deepseek = DeepSeekProfile(
     name="deepseek", aliases=("deepseek-chat", "deep-seek"), env_vars=("DEEPSEEK_API_KEY",), display_name="DeepSeek",

@@ -822,6 +822,7 @@ from hermes_cli.web_routers import (
     delegation as _delegation_routes,
     webapp_access as _webapp_access_routes,
     ui_preferences as _ui_preferences_routes,
+    usage_limits as _usage_limits_routes,
 )
 
 import hermes_cli.web_routers.desktop_plugins as _desktop_plugin_routes
@@ -860,6 +861,7 @@ app.include_router(_profiles_routes.router)
 app.include_router(_skills_routes.router)
 app.include_router(_tools_routes.router)
 app.include_router(_analytics_routes.router)
+app.include_router(_usage_limits_routes.router)
 app.include_router(_chat_ws_routes.router)
 app.include_router(_chat_workspaces_routes.router)
 app.include_router(_dashboard_ui_routes.router)
