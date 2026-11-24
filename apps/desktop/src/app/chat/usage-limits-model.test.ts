@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { UsageLimitProvider } from '@/api/usage-limits'
 
-import { limitTone, toProviderLimitsView, visibleLimitProviders } from './usage-limits-model'
+import { donutFor, limitTone, toProviderLimitsView, visibleLimitProviders } from './usage-limits-model'
 
 const NOW = Date.parse('2026-11-24T12:00:00Z')
 
@@ -83,5 +83,29 @@ describe('visibleLimitProviders', () => {
 
     expect(views.map(v => v.provider)).toEqual(['deepseek', 'openai-codex'])
     expect(views[0].details).toEqual(['Balance: $12.50'])
+  })
+})
+
+describe('donutFor', () => {
+  const codex = provider({ windows: [win('Session', 100), win('Weekly', 0)] })
+  const anthropic = provider({ provider: 'anthropic', name: 'Anthropic', windows: [win('Current week', 17)] })
+  const deepseek = provider({ provider: 'deepseek', name: 'DeepSeek', plan: null, details: ['Balance: $12.50'] })
+
+  it('uses the tightest window of the CURRENT provider only', () => {
+    expect(donutFor([codex, anthropic], 'anthropic', NOW)).toMatchObject({ fraction: 0.17, tone: 'notice' })
+    expect(donutFor([codex, anthropic], 'openai-codex', NOW)).toMatchObject({ fraction: 0, tone: 'warn' })
+  })
+
+  it('draws a neutral ring for a balance, red when the provider says it is out', () => {
+    expect(donutFor([deepseek], 'deepseek', NOW)).toMatchObject({ fraction: null, tone: 'ok' })
+
+    const empty = provider({ provider: 'deepseek', name: 'DeepSeek', details: ['Balance: $0.00', 'API access unavailable'] })
+
+    expect(donutFor([empty], 'deepseek', NOW)?.tone).toBe('warn')
+  })
+
+  it('draws nothing for unknown, unreadable or empty providers', () => {
+    expect(donutFor([codex], 'gemini', NOW)).toBeNull()
+    expect(donutFor([provider({ provider: 'x' })], 'x', NOW)).toBeNull()
   })
 })

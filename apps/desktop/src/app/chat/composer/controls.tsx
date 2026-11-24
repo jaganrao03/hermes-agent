@@ -18,6 +18,7 @@ import { ModelPill } from './model-pill'
 import { ReasoningPill } from './reasoning-pill'
 import { StartVoiceButton } from './start-voice-button'
 import type { ChatBarState, VoiceStatus } from './types'
+import { UsageDonut } from './usage-donut'
 import { VoiceFan } from './voice-fan'
 import { VoiceMenu } from './voice-menu'
 
@@ -148,6 +149,7 @@ export function ComposerControls({
           {hideModelPill ? null : (
             <>
               <ModelPill compact={compactModelPill} disabled={disabled} model={state.model} />
+              {compactModelPill ? null : <UsageDonut disabled={disabled} provider={state.model.provider} />}
               {compactModelPill ? null : <ReasoningPill disabled={disabled} model={state.model} />}
             </>
           )}

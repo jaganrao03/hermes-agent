@@ -74,3 +74,45 @@ export function visibleLimitProviders(providers: readonly UsageLimitProvider[], 
     .map(provider => toProviderLimitsView(provider, nowMs))
     .filter(view => view.rows.length > 0 || view.details.length > 0)
 }
+
+export interface DonutView {
+  /** 0–1 fraction left; null when the provider reports no percentage (balance-only). */
+  fraction: null | number
+  tone: LimitTone
+  /** Short accessible/tooltip text, e.g. `Anthropic: 17% left (Current week)`. */
+  label: string
+}
+
+/** The donut for ONE provider — the one the composer is currently running on. Tightest window
+ *  decides the color; a balance-only provider (DeepSeek) is a neutral ring, red if it says it is
+ *  out. Returns null when the provider is absent or unreadable, so no donut is drawn. */
+export function donutFor(
+  providers: readonly UsageLimitProvider[],
+  slug: string,
+  nowMs = Date.now()
+): DonutView | null {
+  const match = providers.find(p => p.provider === slug.trim().toLowerCase())
+
+  if (!match) {
+    return null
+  }
+
+  const view = toProviderLimitsView(match, nowMs)
+  const tightest = view.rows[0]
+
+  if (tightest) {
+    return {
+      fraction: tightest.fraction,
+      tone: tightest.tone,
+      label: `${view.name}: ${tightest.remainingText} (${tightest.label})`
+    }
+  }
+
+  if (view.details.length > 0) {
+    const out = view.details.some(line => /unavailable|exhausted|insufficient/i.test(line))
+
+    return { fraction: null, tone: out ? 'warn' : 'ok', label: `${view.name}: ${view.details[0]}` }
+  }
+
+  return null
+}

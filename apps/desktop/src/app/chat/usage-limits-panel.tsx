@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useStore } from '@nanostores/react'
+import { useEffect } from 'react'
 
-import { getUsageLimits, type UsageLimitProvider } from '@/api/usage-limits'
 import { Progress } from '@/components/ui/progress'
 import { useI18n } from '@/i18n'
 import { RefreshCw } from '@/lib/icons'
 import { cn } from '@/lib/utils'
+import { $usageLimits, loadUsageLimits } from '@/store/usage-limits'
 
 import { type LimitTone, visibleLimitProviders } from './usage-limits-model'
 
@@ -14,32 +15,18 @@ const TONE_FILL: Record<LimitTone, string> = {
   warn: 'bg-destructive'
 }
 
-type LoadState =
-  | { status: 'error' }
-  | { status: 'loading' }
-  | { providers: UsageLimitProvider[]; status: 'ready' }
-
 /**
  * Plan windows (how much is left, when it resets) and API-key balances for every signed-in
- * provider. Mounted by the popover, so it fetches when the popover opens; the backend caches
- * for a minute, and the refresh button bypasses that.
+ * provider. Shares one cached fetch with the composer donut; the refresh button bypasses it.
  */
 export function UsageLimitsPanel() {
   const { t } = useI18n()
   const c = t.composer
-  const [state, setState] = useState<LoadState>({ status: 'loading' })
-
-  const load = useCallback((refresh: boolean) => {
-    setState(prev => (prev.status === 'ready' ? prev : { status: 'loading' }))
-
-    return getUsageLimits({ refresh })
-      .then(res => setState({ providers: res.providers, status: 'ready' }))
-      .catch(() => setState({ status: 'error' }))
-  }, [])
+  const state = useStore($usageLimits)
 
   useEffect(() => {
-    void load(false)
-  }, [load])
+    void loadUsageLimits()
+  }, [])
 
   const views = state.status === 'ready' ? visibleLimitProviders(state.providers) : []
 
@@ -50,14 +37,14 @@ export function UsageLimitsPanel() {
         <button
           aria-label={c.usageLimitsRefresh}
           className="rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
-          onClick={() => void load(true)}
+          onClick={() => void loadUsageLimits({ refresh: true })}
           type="button"
         >
-          <RefreshCw className={cn('size-3', state.status === 'loading' && 'animate-spin')} />
+          <RefreshCw className={cn('size-3', (state.status === 'loading' || state.status === 'idle') && 'animate-spin')} />
         </button>
       </div>
 
-      {state.status === 'loading' && <p className="text-[0.68rem] text-muted-foreground">{c.usageLimitsLoading}</p>}
+      {(state.status === 'loading' || state.status === 'idle') && <p className="text-[0.68rem] text-muted-foreground">{c.usageLimitsLoading}</p>}
       {state.status === 'error' && <p className="text-[0.68rem] text-destructive">{c.usageLimitsError}</p>}
       {state.status === 'ready' && views.length === 0 && (
         <p className="text-[0.68rem] text-muted-foreground">{c.usageLimitsNone}</p>

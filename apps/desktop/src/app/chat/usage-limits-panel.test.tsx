@@ -1,12 +1,15 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import { resetUsageLimits } from '@/store/usage-limits'
+
 import { UsageLimitsPanel } from './usage-limits-panel'
 
 const api = vi.fn()
 
 beforeEach(() => {
   api.mockReset()
+  resetUsageLimits()
   ;(window as unknown as { hermesDesktop: unknown }).hermesDesktop = { api }
 })
 
@@ -38,6 +41,7 @@ describe('UsageLimitsPanel', () => {
     render(<UsageLimitsPanel />)
     expect(await screen.findByText(/No provider is reporting/)).toBeTruthy()
     cleanup()
+    resetUsageLimits()
     api.mockRejectedValueOnce(new Error('down'))
     render(<UsageLimitsPanel />)
     expect(await screen.findByText(/Could not read limits/)).toBeTruthy()
