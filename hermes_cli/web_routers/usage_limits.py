@@ -21,20 +21,26 @@ router = APIRouter()
 _config_profile_scope = late("_config_profile_scope", "hermes_cli.web_server_profiles")
 
 
-def _usage_capable_providers() -> list[dict]:
-    """Signed-in providers whose usage can be read, as ``{slug, name}`` in picker order."""
-    from agent.account_usage_cache import has_account_usage
-    from hermes_cli.inventory import build_model_options_payload, load_picker_context
+_BUILTIN_NAMES = {"anthropic": "Anthropic", "openai-codex": "OpenAI Codex", "openrouter": "OpenRouter"}
 
-    payload = build_model_options_payload(load_picker_context())
-    out: list[dict] = []
-    for row in payload.get("providers", []):
-        slug = str(row.get("slug") or "").strip().lower()
-        if not slug or row.get("is_user_defined") or row.get("authenticated") is False:
+
+def _usage_capable_providers() -> list[dict]:
+    """Every provider that CAN report usage, as ``{slug, name}`` — not just the model picker's.
+
+    The picker lists providers with models configured; a signed-in subscription that is not in
+    the picker (e.g. Codex with its weekly window spent) still has limits worth showing. A
+    provider with no credentials simply returns no snapshot and is hidden by the client.
+    """
+    from agent.account_usage import _USAGE_FETCHERS
+    from providers import list_providers
+    from providers.base import ProviderProfile
+
+    out: dict[str, str] = {slug: _BUILTIN_NAMES.get(slug, slug) for slug in sorted(_USAGE_FETCHERS)}
+    for profile in list_providers():
+        if type(profile).fetch_account_usage is ProviderProfile.fetch_account_usage:
             continue
-        if has_account_usage(slug):
-            out.append({"slug": slug, "name": str(row.get("name") or slug)})
-    return out
+        out.setdefault(profile.name, profile.display_name or _BUILTIN_NAMES.get(profile.name, profile.name))
+    return [{"slug": slug, "name": name} for slug, name in out.items()]
 
 
 def _build(profile: Optional[str], force: bool) -> dict:

@@ -149,6 +149,20 @@ def test_deepseek_exhausted_balance_is_flagged(monkeypatch):
     assert snap.details[0] == "Balance: $0.00" and "unavailable" in snap.details[-1]
 
 
+def test_deepseek_negative_zero_balance_renders_as_zero(monkeypatch):
+    _patch_deepseek(monkeypatch, {"is_available": False, "balance_infos": [{"currency": "USD", "total_balance": "-0.00"}]})
+    assert _deepseek().fetch_account_usage().details[0] == "Balance: $0.00"
+
+
+def test_capable_providers_do_not_depend_on_the_model_picker():
+    from hermes_cli.web_routers import usage_limits
+
+    slugs = {p["slug"] for p in usage_limits._usage_capable_providers()}
+    assert {"openai-codex", "anthropic", "openrouter", "deepseek"} <= slugs
+    names = {p["slug"]: p["name"] for p in usage_limits._usage_capable_providers()}
+    assert names["openai-codex"] == "OpenAI Codex" and names["deepseek"] == "DeepSeek"
+
+
 def test_deepseek_without_key_or_balances_returns_none(monkeypatch):
     _patch_deepseek(monkeypatch, {"balance_infos": []}, token="")
     assert _deepseek().fetch_account_usage() is None

@@ -80,6 +80,7 @@ class DeepSeekProfile(ProviderProfile):
                 total = float(info.get("total_balance"))
             except (TypeError, ValueError):
                 continue
+            total = 0.0 if total <= 0 else total  # never render "$-0.00" (max(-0.0, 0.0) keeps the sign)
             parts = [f"Balance: {symbol}{total:.2f}"]
             for key, label in (("topped_up_balance", "topped up"), ("granted_balance", "granted")):
                 try:
