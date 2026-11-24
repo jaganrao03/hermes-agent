@@ -70,10 +70,10 @@ export const parseNextPromptSuggestions = (value: unknown, freshAfter?: number):
 }
 
 /** Cached-row poll interval, and how long we wait for one before generating. */
-const POLL_MS = 1_000
-const POLL_ATTEMPTS = 10
+const POLL_MS = 400
+const POLL_ATTEMPTS = 25
 // A pending lease can remain valid for 90 seconds in the plugin store.
-const PENDING_POLL_ATTEMPTS = 90
+const PENDING_POLL_ATTEMPTS = 225
 /** Backoff between generation attempts; nothing is ever surfaced about them. */
 const RETRY_DELAYS = [2_000, 6_000, 15_000]
 
