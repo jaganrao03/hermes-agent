@@ -45,7 +45,7 @@ export function UsageDonut({ disabled, provider: snapshotProvider }: { disabled?
       return null
     }
 
-    const label = state.status === 'error' ? t.composer.usageLimitsError : t.composer.usageLimitsNone
+    const label = `${state.status === 'error' ? t.composer.usageLimitsError : t.composer.usageLimitsNone} (${provider})`
 
     return (
       <Popover>

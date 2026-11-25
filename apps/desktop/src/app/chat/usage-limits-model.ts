@@ -86,12 +86,25 @@ export interface DonutView {
 /** The donut for ONE provider — the one the composer is currently running on. Tightest window
  *  decides the color; a balance-only provider (DeepSeek) is a neutral ring, red if it says it is
  *  out. Returns null when the provider is absent or unreadable, so no donut is drawn. */
+// Mirrors hermes_cli/providers.py aliases: the session may report a provider by an alias.
+const USAGE_PROVIDER_ALIASES: Record<string, string> = {
+  claude: 'anthropic',
+  'claude-code': 'anthropic',
+  'anthropic-oauth': 'anthropic',
+  chatgpt: 'openai-codex',
+  'chatgpt-codex': 'openai-codex',
+  codex: 'openai-codex',
+  'deep-seek': 'deepseek'
+}
+
 export function donutFor(
   providers: readonly UsageLimitProvider[],
   slug: string,
   nowMs = Date.now()
 ): DonutView | null {
-  const match = providers.find(p => p.provider === slug.trim().toLowerCase())
+  const key = slug.trim().toLowerCase()
+  const canon = USAGE_PROVIDER_ALIASES[key] ?? key
+  const match = providers.find(p => p.provider === canon)
 
   if (!match) {
     return null
