@@ -104,7 +104,8 @@ export function donutFor(
 ): DonutView | null {
   const key = slug.trim().toLowerCase()
   const canon = USAGE_PROVIDER_ALIASES[key] ?? key
-  const match = providers.find(p => p.provider === canon)
+  const fuzzy = /claude|anthropic/.test(key) ? 'anthropic' : /codex|chatgpt/.test(key) ? 'openai-codex' : ''
+  const match = providers.find(p => p.provider === canon) ?? providers.find(p => fuzzy && p.provider === fuzzy)
 
   if (!match) {
     return null

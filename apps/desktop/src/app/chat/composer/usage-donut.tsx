@@ -25,7 +25,7 @@ const TONE_STROKE: Record<LimitTone, string> = {
  * window is left, colored green → amber (≤20%) → red (≤10%). Click for every provider's windows,
  * reset times and API-key balances. Draws nothing when the provider reports no limits.
  */
-export function UsageDonut({ disabled, provider: snapshotProvider }: { disabled?: boolean; provider: string }) {
+export function UsageDonut({ disabled, model, provider: snapshotProvider }: { disabled?: boolean; model?: string; provider: string }) {
   const { t } = useI18n()
   const state = useStore($usageLimits)
   // The model pill falls back to the live session provider when the chat-bar snapshot has none yet;
@@ -37,7 +37,12 @@ export function UsageDonut({ disabled, provider: snapshotProvider }: { disabled?
     void loadUsageLimits()
   }, [provider])
 
-  const donut = state.status === 'ready' && provider ? donutFor(state.providers, provider) : null
+  const modelHint = /^claude/i.test((model || '').trim()) ? 'anthropic' : ''
+
+  const donut =
+    state.status === 'ready' && provider
+      ? (donutFor(state.providers, provider) ?? (modelHint ? donutFor(state.providers, modelHint) : null))
+      : null
 
   if (!donut) {
     // Never vanish silently: a failed or empty read shows a muted ring so the control is findable.
@@ -45,7 +50,7 @@ export function UsageDonut({ disabled, provider: snapshotProvider }: { disabled?
       return null
     }
 
-    const label = `${state.status === 'error' ? t.composer.usageLimitsError : t.composer.usageLimitsNone} (${provider})`
+    const label = `${state.status === 'error' ? t.composer.usageLimitsError : t.composer.usageLimitsNone} (${provider}${model ? ` / ${model}` : ''})`
 
     return (
       <Popover>
