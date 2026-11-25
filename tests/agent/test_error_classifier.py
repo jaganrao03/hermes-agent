@@ -436,7 +436,9 @@ class TestClassifyApiError:
         )
         result = classify_api_error(e, provider="openai-codex", model="gpt-5-codex")
         assert result.reason == FailoverReason.rate_limit
-        assert result.retryable is True
+        # Updated 2026-11-25 (approved 1h threshold): a 6h29m window is longer than 1h, so terminal.
+        assert result.retryable is False
+        assert result.should_fallback is True
 
     @pytest.mark.parametrize(
         "phrase",
@@ -2159,3 +2161,33 @@ class TestStreamingRenderFormatError:
         e = MockAPIError("Error rendering prompt with jinja template: ...", status_code=500)
         result = classify_api_error(e, provider="lm-studio", model="x")
         assert result.reason != FailoverReason.format_error
+
+
+class TestUsageLimitLongWindowTerminal:
+    """Approved 2026-11-25: a usage-limit window closed for more than 1 hour is terminal."""
+
+    def test_weekly_window_reset_is_terminal_but_falls_back(self):
+        import time as _t
+        e = MockAPIError(
+            "usage limit reached",
+            status_code=429,
+            body={"error": {"type": "usage_limit_reached",
+                            "message": "The usage limit has been reached",
+                            "resets_at": _t.time() + 2 * 24 * 3600}},
+        )
+        result = classify_api_error(e, provider="openai-codex", model="gpt-6-luna")
+        assert result.reason == FailoverReason.rate_limit
+        assert result.retryable is False
+        assert result.should_fallback is True
+
+    def test_short_reset_stays_retryable(self):
+        import time as _t
+        e = MockAPIError(
+            "usage limit reached",
+            status_code=429,
+            body={"error": {"type": "usage_limit_reached",
+                            "message": "The usage limit has been reached",
+                            "resets_at": _t.time() + 600}},
+        )
+        result = classify_api_error(e, provider="openai-codex", model="gpt-6-luna")
+        assert result.retryable is True
