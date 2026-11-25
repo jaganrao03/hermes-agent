@@ -40,7 +40,36 @@ export function UsageDonut({ disabled, provider: snapshotProvider }: { disabled?
   const donut = state.status === 'ready' && provider ? donutFor(state.providers, provider) : null
 
   if (!donut) {
-    return null
+    // Never vanish silently: a failed or empty read shows a muted ring so the control is findable.
+    if (!provider || state.status === 'idle' || state.status === 'loading') {
+      return null
+    }
+
+    const label = state.status === 'error' ? t.composer.usageLimitsError : t.composer.usageLimitsNone
+
+    return (
+      <Popover>
+        <Tip label={label} side="top">
+          <PopoverTrigger asChild>
+            <Button
+              aria-label={`${t.composer.usageLimits}: ${label}`}
+              className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
+              data-testid="usage-donut-empty"
+              disabled={disabled}
+              type="button"
+              variant="ghost"
+            >
+              <svg aria-hidden className="size-4" viewBox="0 0 16 16">
+                <circle className="stroke-current opacity-30" cx="8" cy="8" fill="none" r={R} strokeDasharray="2 2" strokeWidth="2" />
+              </svg>
+            </Button>
+          </PopoverTrigger>
+        </Tip>
+        <PopoverContent align="end" className="max-h-[70vh] w-72 overflow-y-auto p-2.5 text-xs" side="top" sideOffset={8}>
+          <UsageLimitsPanel />
+        </PopoverContent>
+      </Popover>
+    )
   }
 
   const arc = donut.fraction === null ? C : C * donut.fraction
