@@ -67,3 +67,15 @@ describe('UsageDonut', () => {
     expect(button.getAttribute('aria-label')).toMatch(/OpenAI Codex: 0% left/)
   })
 })
+
+describe('UsageDonut click', () => {
+  it('opens the limits panel when clicked', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    api.mockResolvedValue({ providers: [row('anthropic', 'Anthropic', { windows: [win('Current week', 17)] })] })
+    render(<UsageDonut model="claude-haiku-4-5" provider="anthropic" />)
+    const button = await screen.findByTestId('usage-donut')
+    fireEvent.pointerDown(button, { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(button)
+    expect(await screen.findByTestId('usage-build-id')).toBeTruthy()
+  })
+})
