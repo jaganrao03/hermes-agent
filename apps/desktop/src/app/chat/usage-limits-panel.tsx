@@ -19,6 +19,15 @@ const TONE_FILL: Record<LimitTone, string> = {
  * Plan windows (how much is left, when it resets) and API-key balances for every signed-in
  * provider. Shares one cached fetch with the composer donut; the refresh button bypasses it.
  */
+// Hash of the entry bundle this page actually loaded, so two devices can be compared at a glance.
+function loadedBuildId(): string {
+  const src = Array.from(document.querySelectorAll('script[src]'))
+    .map(el => el.getAttribute('src') || '')
+    .find(u => /\/assets\/index-[^/]+\.js/.test(u))
+
+  return src?.match(/index-([^./]+)\.js/)?.[1] ?? 'dev'
+}
+
 export function UsageLimitsPanel() {
   const { t } = useI18n()
   const c = t.composer
@@ -82,6 +91,10 @@ export function UsageLimitsPanel() {
           </div>
         ))}
       </div>
+
+      <p className="mt-2 text-[0.6rem] text-muted-foreground/70" data-testid="usage-build-id">
+        build {loadedBuildId()} · {window.location.host}
+      </p>
     </section>
   )
 }
