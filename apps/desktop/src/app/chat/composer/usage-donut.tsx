@@ -46,11 +46,19 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
 
   if (!donut) {
     // Never vanish silently: a failed or empty read shows a muted ring so the control is findable.
-    if (!provider || state.status === 'idle' || state.status === 'loading') {
+    if (!provider || state.status === 'idle') {
       return null
     }
 
-    const label = `${state.status === 'error' ? t.composer.usageLimitsError : t.composer.usageLimitsNone} (${provider}${model ? ` / ${model}` : ''})`
+    // 'loading' must keep the ring mounted: opening the menu reloads usage, and unmounting here would close it.
+    const base =
+      state.status === 'error'
+        ? t.composer.usageLimitsError
+        : state.status === 'loading'
+          ? t.composer.usageLimitsLoading
+          : t.composer.usageLimitsNone
+
+    const label = `${base} (${provider}${model ? ` / ${model}` : ''})`
 
     return (
       <DropdownMenu>

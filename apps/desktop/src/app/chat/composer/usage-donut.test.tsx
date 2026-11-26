@@ -78,3 +78,16 @@ describe('UsageDonut click', () => {
     expect(await screen.findByTestId('usage-build-id')).toBeTruthy()
   })
 })
+
+describe('UsageDonut after a failed read', () => {
+  it('keeps the menu open while opening it reloads usage', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    api.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ providers: [] })
+    render(<UsageDonut model="claude-haiku-4-5" provider="anthropic" />)
+    const button = await screen.findByTestId('usage-donut-empty')
+    fireEvent.pointerDown(button, { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    expect(await screen.findByTestId('usage-build-id')).toBeTruthy()
+    await new Promise(r => setTimeout(r, 50))
+    expect(screen.queryByTestId('usage-build-id')).toBeTruthy()
+  })
+})
