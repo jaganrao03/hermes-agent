@@ -25,7 +25,7 @@ const TONE_STROKE: Record<LimitTone, string> = {
  * window is left, colored green → amber (≤20%) → red (≤10%). Click for every provider's windows,
  * reset times and API-key balances. Draws nothing when the provider reports no limits.
  */
-export function UsageDonut({ disabled, model, provider: snapshotProvider }: { disabled?: boolean; model?: string; provider: string }) {
+export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: boolean; model?: string; provider: string }) {
   const { t } = useI18n()
   const state = useStore($usageLimits)
   // The model pill falls back to the live session provider when the chat-bar snapshot has none yet;
@@ -60,12 +60,11 @@ export function UsageDonut({ disabled, model, provider: snapshotProvider }: { di
               aria-label={`${t.composer.usageLimits}: ${label}`}
               className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
               data-testid="usage-donut-empty"
-              disabled={disabled}
               type="button"
               variant="ghost"
             >
               <svg aria-hidden className="size-4" viewBox="0 0 16 16">
-                <circle className="stroke-current opacity-30" cx="8" cy="8" fill="none" r={R} strokeDasharray="2 2" strokeWidth="2" />
+                <circle className="stroke-current opacity-60" cx="8" cy="8" fill="none" r={R} strokeDasharray="2 2" strokeWidth="2" />
               </svg>
             </Button>
           </PopoverTrigger>
@@ -87,7 +86,6 @@ export function UsageDonut({ disabled, model, provider: snapshotProvider }: { di
             aria-label={`${t.composer.usageLimits}: ${donut.label}`}
             className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
             data-testid="usage-donut"
-            disabled={disabled}
             type="button"
             variant="ghost"
           >
