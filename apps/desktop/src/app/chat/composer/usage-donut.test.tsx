@@ -75,7 +75,6 @@ describe('UsageDonut click', () => {
     render(<UsageDonut model="claude-haiku-4-5" provider="anthropic" />)
     const button = await screen.findByTestId('usage-donut')
     fireEvent.pointerDown(button, { button: 0, ctrlKey: false, pointerType: 'mouse' })
-    fireEvent.click(button)
     expect(await screen.findByTestId('usage-build-id')).toBeTruthy()
   })
 })

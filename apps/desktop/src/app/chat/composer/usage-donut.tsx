@@ -5,7 +5,7 @@ import { useSessionView } from '@/app/chat/session-view'
 import { donutFor, type LimitTone } from '@/app/chat/usage-limits-model'
 import { UsageLimitsPanel } from '@/app/chat/usage-limits-panel'
 import { Button } from '@/components/ui/button'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -53,9 +53,9 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
     const label = `${state.status === 'error' ? t.composer.usageLimitsError : t.composer.usageLimitsNone} (${provider}${model ? ` / ${model}` : ''})`
 
     return (
-      <Popover>
+      <DropdownMenu>
         <Tip label={label} side="top">
-          <PopoverTrigger asChild>
+          <DropdownMenuTrigger asChild>
             <Button
               aria-label={`${t.composer.usageLimits}: ${label}`}
               className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
@@ -67,21 +67,21 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
                 <circle className="stroke-current opacity-60" cx="8" cy="8" fill="none" r={R} strokeDasharray="2 2" strokeWidth="2" />
               </svg>
             </Button>
-          </PopoverTrigger>
+          </DropdownMenuTrigger>
         </Tip>
-        <PopoverContent align="end" className="max-h-[70vh] w-72 overflow-y-auto p-2.5 text-xs" side="top" sideOffset={8}>
+        <DropdownMenuContent align="end" className="max-h-[70vh] w-72 overflow-y-auto p-2.5 text-xs" side="top" sideOffset={8}>
           <UsageLimitsPanel />
-        </PopoverContent>
-      </Popover>
+        </DropdownMenuContent>
+      </DropdownMenu>
     )
   }
 
   const arc = donut.fraction === null ? C : C * donut.fraction
 
   return (
-    <Popover>
+    <DropdownMenu>
       <Tip label={donut.label} side="top">
-        <PopoverTrigger asChild>
+        <DropdownMenuTrigger asChild>
           <Button
             aria-label={`${t.composer.usageLimits}: ${donut.label}`}
             className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
@@ -103,11 +103,11 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
               />
             </svg>
           </Button>
-        </PopoverTrigger>
+        </DropdownMenuTrigger>
       </Tip>
-      <PopoverContent align="end" className="max-h-[70vh] w-72 overflow-y-auto p-2.5 text-xs" side="top" sideOffset={8}>
+      <DropdownMenuContent align="end" className="max-h-[70vh] w-72 overflow-y-auto p-2.5 text-xs" side="top" sideOffset={8}>
         <UsageLimitsPanel />
-      </PopoverContent>
-    </Popover>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
