@@ -44,69 +44,43 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
       ? (donutFor(state.providers, provider) ?? (modelHint ? donutFor(state.providers, modelHint) : null))
       : null
 
-  if (!donut) {
-    // Never vanish silently: a failed or empty read shows a muted ring so the control is findable.
-    if (!provider || state.status === 'idle') {
-      return null
-    }
-
-    // 'loading' must keep the ring mounted: opening the menu reloads usage, and unmounting here would close it.
-    const base =
-      state.status === 'error'
-        ? t.composer.usageLimitsError
-        : state.status === 'loading'
-          ? t.composer.usageLimitsLoading
-          : t.composer.usageLimitsNone
-
-    const label = `${base} (${provider}${model ? ` / ${model}` : ''})`
-
-    return (
-      <DropdownMenu>
-        <Tip label={label} side="top">
-          <DropdownMenuTrigger asChild>
-            <Button
-              aria-label={`${t.composer.usageLimits}: ${label}`}
-              className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
-              data-testid="usage-donut-empty"
-              type="button"
-              variant="ghost"
-            >
-              <svg aria-hidden className="size-4" viewBox="0 0 16 16">
-                <circle className="stroke-current opacity-60" cx="8" cy="8" fill="none" r={R} strokeDasharray="2 2" strokeWidth="2" />
-              </svg>
-            </Button>
-          </DropdownMenuTrigger>
-        </Tip>
-        <DropdownMenuContent align="end" className="max-h-[70vh] w-72 overflow-y-auto p-2.5 text-xs" side="top" sideOffset={8}>
-          <UsageLimitsPanel />
-        </DropdownMenuContent>
-      </DropdownMenu>
-    )
+  if (!provider) {
+    return null
   }
 
-  const arc = donut.fraction === null ? C : C * donut.fraction
+  // ONE tree for every state: swapping between two trees remounts the menu while it is open
+  // (usage arrives after the click), which drops its anchor and opens it away from the ring.
+  const base =
+    state.status === 'error'
+      ? t.composer.usageLimitsError
+      : state.status === 'idle' || state.status === 'loading'
+        ? t.composer.usageLimitsLoading
+        : t.composer.usageLimitsNone
+
+  const label = donut ? donut.label : `${base} (${provider}${model ? ` / ${model}` : ''})`
+  const arc = !donut || donut.fraction === null ? C : C * donut.fraction
 
   return (
     <DropdownMenu>
-      <Tip label={donut.label} side="top">
+      <Tip label={label} side="top">
         <DropdownMenuTrigger asChild>
           <Button
-            aria-label={`${t.composer.usageLimits}: ${donut.label}`}
+            aria-label={`${t.composer.usageLimits}: ${label}`}
             className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
-            data-testid="usage-donut"
+            data-testid={donut ? 'usage-donut' : 'usage-donut-empty'}
             type="button"
             variant="ghost"
           >
             <svg aria-hidden className="size-4 -rotate-90" viewBox="0 0 16 16">
               <circle className="stroke-current opacity-20" cx="8" cy="8" fill="none" r={R} strokeWidth="2.5" />
               <circle
-                className={cn('transition-[stroke-dasharray]', TONE_STROKE[donut.tone])}
+                className={cn('transition-[stroke-dasharray]', donut ? TONE_STROKE[donut.tone] : 'stroke-current opacity-60')}
                 cx="8"
                 cy="8"
                 fill="none"
                 r={R}
-                strokeDasharray={`${arc} ${C}`}
-                strokeLinecap="round"
+                strokeDasharray={donut ? `${arc} ${C}` : '2 2'}
+                strokeLinecap={donut ? 'round' : 'butt'}
                 strokeWidth="2.5"
               />
             </svg>
