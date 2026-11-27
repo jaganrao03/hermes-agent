@@ -110,3 +110,18 @@ describe('UsageDonut placement', () => {
     expect(screen.queryByTestId('usage-popover')).toBeNull()
   })
 })
+
+describe('UsageDonut provider precedence', () => {
+  it('follows a Claude model even when the provider snapshot still says codex', async () => {
+    api.mockResolvedValue({
+      providers: [
+        row('openai-codex', 'OpenAI Codex', { windows: [win('Weekly', 0)] }),
+        row('anthropic', 'Anthropic', { windows: [win('Session', 94)] })
+      ]
+    })
+    render(<UsageDonut model="claude-sonnet-5-5" provider="openai-codex" />)
+    const button = await screen.findByTestId('usage-donut')
+
+    expect(button.getAttribute('aria-label')).toMatch(/Anthropic: 94% left/)
+  })
+})

@@ -100,7 +100,7 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
 
   const donut =
     state.status === 'ready' && provider
-      ? (donutFor(state.providers, provider) ?? (modelHint ? donutFor(state.providers, modelHint) : null))
+      ? ((modelHint ? donutFor(state.providers, modelHint) : null) ?? donutFor(state.providers, provider))
       : null
 
   if (!provider) {
