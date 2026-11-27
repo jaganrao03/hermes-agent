@@ -98,7 +98,7 @@ describe('UsageDonut placement', () => {
     api.mockResolvedValue({ providers: [row('anthropic', 'Anthropic', { windows: [win('Week', 40)] })] })
     render(<UsageDonut model="claude-haiku-4-5" provider="anthropic" />)
     const button = await screen.findByTestId('usage-donut')
-    button.getBoundingClientRect = () => ({ top: 400, bottom: 424, left: 650, right: 674, width: 24, height: 24, x: 650, y: 400, toJSON: () => ({}) })
+    screen.getByTestId('usage-donut-group').getBoundingClientRect = () => ({ top: 400, bottom: 424, left: 650, right: 674, width: 24, height: 24, x: 650, y: 400, toJSON: () => ({}) })
     Object.defineProperty(window, 'innerHeight', { value: 456, configurable: true })
     Object.defineProperty(window, 'innerWidth', { value: 887, configurable: true })
     fireEvent.click(button)
@@ -137,6 +137,58 @@ describe('UsageDonut model wins over a stale provider', () => {
     render(<UsageDonut model="claude-sonnet-5-5" provider="openai-codex" />)
     const button = await screen.findByTestId('usage-donut')
     expect(button.getAttribute('aria-label')).toMatch(/Anthropic: 94% left/)
+  })
+})
+
+describe('UsageDonut one ring per provider', () => {
+  const two = () =>
+    api.mockResolvedValue({
+      providers: [
+        row('openai-codex', 'OpenAI Codex', { windows: [win('Weekly', 0)] }),
+        row('anthropic', 'Anthropic', { windows: [win('Session', 91), win('Week', 98)] })
+      ]
+    })
+
+  it('draws both providers side by side with distinct tones', async () => {
+    two()
+    render(<UsageDonut model="claude-sonnet-5-5" provider="anthropic" />)
+    const cur = await screen.findByTestId('usage-donut')
+    const other = await screen.findByTestId('usage-donut-other')
+
+    expect(cur.getAttribute('aria-label')).toMatch(/Anthropic: 91% left/)
+    expect(other.getAttribute('aria-label')).toMatch(/OpenAI Codex: 0% left/)
+    expect(cur.querySelectorAll('circle')[1].getAttribute('class')).toContain('stroke-emerald-500')
+    expect(other.querySelectorAll('circle')[1].getAttribute('class')).toContain('stroke-destructive')
+  })
+
+  it('emphasises only the current provider and follows a switch', async () => {
+    two()
+    render(<UsageDonut model="gpt-6-luna" provider="openai-codex" />)
+    const cur = await screen.findByTestId('usage-donut')
+
+    expect(cur.getAttribute('aria-label')).toMatch(/OpenAI Codex/)
+    expect(cur.getAttribute('data-current')).toBe('true')
+    expect(screen.getByTestId('usage-donut-other').getAttribute('data-current')).toBeNull()
+  })
+
+  it('shows an amber ring at 20% left', async () => {
+    api.mockResolvedValue({
+      providers: [
+        row('anthropic', 'Anthropic', { windows: [win('Week', 18)] }),
+        row('openai-codex', 'OpenAI Codex', { windows: [win('Weekly', 80)] })
+      ]
+    })
+    render(<UsageDonut provider="anthropic" />)
+    const cur = await screen.findByTestId('usage-donut')
+
+    expect(cur.querySelectorAll('circle')[1].getAttribute('class')).toContain('stroke-amber-500')
+  })
+
+  it('shows other providers even when the current one reports nothing', async () => {
+    two()
+    render(<UsageDonut provider="gemini" />)
+    expect(await screen.findAllByTestId('usage-donut-other')).toHaveLength(2)
+    expect(screen.queryByTestId('usage-donut')).toBeNull()
   })
 })
 

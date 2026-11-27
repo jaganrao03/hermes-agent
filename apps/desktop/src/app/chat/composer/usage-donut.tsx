@@ -3,7 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import { createPortal } from 'react-dom'
 
 import { useSessionView } from '@/app/chat/session-view'
-import { donutFor, type LimitTone } from '@/app/chat/usage-limits-model'
+import { donutFor, type DonutView, type LimitTone } from '@/app/chat/usage-limits-model'
 import { UsageLimitsPanel } from '@/app/chat/usage-limits-panel'
 import { Button } from '@/components/ui/button'
 import { menuSurfaceClass } from '@/components/ui/menu'
@@ -40,7 +40,7 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
 
   const [open, setOpen] = useState(false)
   const [pos, setPos] = useState<{ bottom: number; left: number } | null>(null)
-  const anchor = useRef<HTMLButtonElement>(null)
+  const anchor = useRef<HTMLDivElement>(null)
   const panel = useRef<HTMLDivElement>(null)
 
   // Own the placement instead of leaving it to a popper: the panel sits directly above the ring
@@ -110,10 +110,32 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
 
   const lookup = modelHint || provider
 
-  const donut =
+  const current =
     state.status === 'ready' && lookup
       ? (donutFor(state.providers, lookup) ?? (modelHint ? donutFor(state.providers, provider) : null))
       : null
+
+  // One ring per provider that reports a percentage, so a routed setup (codex -> nous -> anthropic)
+  // shows every quota at once; the ring for the selected model's provider is emphasised.
+  const currentSlug = (modelHint || provider).trim().toLowerCase()
+  const rings: { donut: DonutView; isCurrent: boolean; slug: string }[] = []
+
+  if (state.status === 'ready') {
+    for (const p of state.providers) {
+      const d = donutFor(state.providers, p.provider)
+
+      if (!d || d.fraction === null) {
+        continue
+      }
+
+      const isCurrent = !!current && d.label === current.label
+      rings.push({ donut: d, isCurrent, slug: p.provider })
+    }
+
+    if (current && !rings.some(r => r.isCurrent)) {
+      rings.push({ donut: current, isCurrent: true, slug: currentSlug })
+    }
+  }
 
   if (!provider) {
     return null
@@ -128,37 +150,54 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
         ? t.composer.usageLimitsLoading
         : t.composer.usageLimitsNone
 
-  const label = donut ? donut.label : `${base} (${provider}${model ? ` / ${model}` : ''})`
-  const arc = !donut || donut.fraction === null ? C : C * donut.fraction
+  const empty = rings.length === 0
+
+  const emptyLabel = `${base} (${provider}${model ? ` / ${model}` : ''})`
+
+  const items = empty ? [{ donut: null as DonutView | null, isCurrent: true, slug: provider }] : rings
 
   return (
     <>
-      <Tip label={label} side="top">
-        <Button
-          aria-expanded={open}
-          aria-label={`${t.composer.usageLimits}: ${label}`}
-          className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
-          data-testid={donut ? 'usage-donut' : 'usage-donut-empty'}
-          onClick={() => setOpen(v => !v)}
-          ref={anchor}
-          type="button"
-          variant="ghost"
-        >
-          <svg aria-hidden className="size-4 -rotate-90" viewBox="0 0 16 16">
-            <circle className="stroke-current opacity-20" cx="8" cy="8" fill="none" r={R} strokeWidth="2.5" />
-            <circle
-              className={cn('transition-[stroke-dasharray]', donut ? TONE_STROKE[donut.tone] : 'stroke-current opacity-60')}
-              cx="8"
-              cy="8"
-              fill="none"
-              r={R}
-              strokeDasharray={donut ? `${arc} ${C}` : '2 2'}
-              strokeLinecap={donut ? 'round' : 'butt'}
-              strokeWidth="2.5"
-            />
-          </svg>
-        </Button>
-      </Tip>
+      <div className="flex shrink-0 items-center gap-0.5" data-testid="usage-donut-group" ref={anchor}>
+        {items.map(({ donut, isCurrent, slug }) => {
+          const label = donut ? donut.label : emptyLabel
+          const arc = !donut || donut.fraction === null ? C : C * donut.fraction
+
+          return (
+            <Tip key={slug} label={label} side="top">
+              <Button
+                aria-expanded={open}
+                aria-label={`${t.composer.usageLimits}: ${label}`}
+                className={cn(
+                  'shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)',
+                  isCurrent
+                    ? 'size-(--composer-control-size) ring-1 ring-(--ui-text-tertiary)/40'
+                    : 'size-[calc(var(--composer-control-size)-4px)] opacity-80'
+                )}
+                data-current={isCurrent ? 'true' : undefined}
+                data-testid={donut ? (isCurrent ? 'usage-donut' : 'usage-donut-other') : 'usage-donut-empty'}
+                onClick={() => setOpen(v => !v)}
+                type="button"
+                variant="ghost"
+              >
+                <svg aria-hidden className={cn('-rotate-90', isCurrent ? 'size-4' : 'size-3.5')} viewBox="0 0 16 16">
+                  <circle className="stroke-current opacity-20" cx="8" cy="8" fill="none" r={R} strokeWidth="2.5" />
+                  <circle
+                    className={cn('transition-[stroke-dasharray]', donut ? TONE_STROKE[donut.tone] : 'stroke-current opacity-60')}
+                    cx="8"
+                    cy="8"
+                    fill="none"
+                    r={R}
+                    strokeDasharray={donut ? `${arc} ${C}` : '2 2'}
+                    strokeLinecap={donut ? 'round' : 'butt'}
+                    strokeWidth="2.5"
+                  />
+                </svg>
+              </Button>
+            </Tip>
+          )
+        })}
+      </div>
       {open &&
         createPortal(
           <div
