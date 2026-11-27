@@ -125,3 +125,18 @@ describe('UsageDonut provider precedence', () => {
     expect(button.getAttribute('aria-label')).toMatch(/Anthropic: 94% left/)
   })
 })
+
+describe('UsageDonut model wins over a stale provider', () => {
+  it('shows Anthropic when the model is Sonnet even though the provider still says codex', async () => {
+    api.mockResolvedValue({
+      providers: [
+        row('openai-codex', 'OpenAI Codex', { windows: [win('Weekly', 0)] }),
+        row('anthropic', 'Anthropic', { windows: [win('Session', 94)] })
+      ]
+    })
+    render(<UsageDonut model="claude-sonnet-5-5" provider="openai-codex" />)
+    const button = await screen.findByTestId('usage-donut')
+    expect(button.getAttribute('aria-label')).toMatch(/Anthropic: 94% left/)
+  })
+})
+

@@ -96,11 +96,23 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
     }
   }, [open, place])
 
-  const modelHint = /^claude/i.test((model || '').trim()) ? 'anthropic' : ''
+  // The selected MODEL is the truth: the provider string can lag a model switch (it still said
+  // codex while Sonnet was selected), so a recognisable model family wins over it.
+  const m = (model || '').trim().toLowerCase()
+
+  const modelHint = /^(claude|sonnet|opus|haiku|fable|astra)/.test(m) || m.includes('claude')
+    ? 'anthropic'
+    : /codex|^gpt-/.test(m)
+      ? 'openai-codex'
+      : /deepseek/.test(m)
+        ? 'deepseek'
+        : ''
+
+  const lookup = modelHint || provider
 
   const donut =
-    state.status === 'ready' && provider
-      ? ((modelHint ? donutFor(state.providers, modelHint) : null) ?? donutFor(state.providers, provider))
+    state.status === 'ready' && lookup
+      ? (donutFor(state.providers, lookup) ?? (modelHint ? donutFor(state.providers, provider) : null))
       : null
 
   if (!provider) {

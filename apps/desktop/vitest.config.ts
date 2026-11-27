@@ -52,6 +52,9 @@ const electronNative: TestProjectConfiguration = {
 
 export default defineConfig({
   test: {
+    // 2026-11-26: uncapped runs spawned ~32 workers, pushed load to 45 and starved
+    // the gateway/web app. Cap it; override with VITEST_MAX_WORKERS if needed.
+    maxWorkers: Number(process.env.VITEST_MAX_WORKERS) || 4,
     globalSetup: ['./vitest.run-tmp.ts'],
     projects: [reactUi, electronNative]
   }
