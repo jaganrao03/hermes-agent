@@ -74,7 +74,7 @@ describe('UsageDonut click', () => {
     api.mockResolvedValue({ providers: [row('anthropic', 'Anthropic', { windows: [win('Current week', 17)] })] })
     render(<UsageDonut model="claude-haiku-4-5" provider="anthropic" />)
     const button = await screen.findByTestId('usage-donut')
-    fireEvent.pointerDown(button, { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(button)
     expect(await screen.findByTestId('usage-build-id')).toBeTruthy()
   })
 })
@@ -85,9 +85,28 @@ describe('UsageDonut after a failed read', () => {
     api.mockRejectedValueOnce(new Error('boom')).mockResolvedValue({ providers: [] })
     render(<UsageDonut model="claude-haiku-4-5" provider="anthropic" />)
     const button = await screen.findByTestId('usage-donut-empty')
-    fireEvent.pointerDown(button, { button: 0, ctrlKey: false, pointerType: 'mouse' })
+    fireEvent.click(button)
     expect(await screen.findByTestId('usage-build-id')).toBeTruthy()
     await new Promise(r => setTimeout(r, 50))
     expect(screen.queryByTestId('usage-build-id')).toBeTruthy()
+  })
+})
+
+describe('UsageDonut placement', () => {
+  it('sits directly above the ring, right-aligned, whatever the content does', async () => {
+    const { fireEvent } = await import('@testing-library/react')
+    api.mockResolvedValue({ providers: [row('anthropic', 'Anthropic', { windows: [win('Week', 40)] })] })
+    render(<UsageDonut model="claude-haiku-4-5" provider="anthropic" />)
+    const button = await screen.findByTestId('usage-donut')
+    button.getBoundingClientRect = () => ({ top: 400, bottom: 424, left: 650, right: 674, width: 24, height: 24, x: 650, y: 400, toJSON: () => ({}) })
+    Object.defineProperty(window, 'innerHeight', { value: 456, configurable: true })
+    Object.defineProperty(window, 'innerWidth', { value: 887, configurable: true })
+    fireEvent.click(button)
+    const pop = await screen.findByTestId('usage-popover')
+    await vi.waitFor(() => expect(pop.style.bottom).toBe('64px')) // 456 - 400 + 8
+    expect(pop.style.left).toBe('386px') // right edge 674 - width 288
+    expect(pop.style.visibility).not.toBe('hidden')
+    fireEvent.keyDown(document, { key: 'Escape' })
+    expect(screen.queryByTestId('usage-popover')).toBeNull()
   })
 })

@@ -1,11 +1,12 @@
 import { useStore } from '@nanostores/react'
-import { useEffect } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 import { useSessionView } from '@/app/chat/session-view'
 import { donutFor, type LimitTone } from '@/app/chat/usage-limits-model'
 import { UsageLimitsPanel } from '@/app/chat/usage-limits-panel'
 import { Button } from '@/components/ui/button'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { menuSurfaceClass } from '@/components/ui/menu'
 import { Tip } from '@/components/ui/tooltip'
 import { useI18n } from '@/i18n'
 import { cn } from '@/lib/utils'
@@ -37,6 +38,64 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
     void loadUsageLimits()
   }, [provider])
 
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ bottom: number; left: number } | null>(null)
+  const anchor = useRef<HTMLButtonElement>(null)
+  const panel = useRef<HTMLDivElement>(null)
+
+  // Own the placement instead of leaving it to a popper: the panel sits directly above the ring
+  // (8px gap), right edges aligned, clamped inside the viewport.
+  const place = useCallback(() => {
+    const a = anchor.current?.getBoundingClientRect()
+
+    if (!a) {
+      return
+    }
+
+    const width = panel.current?.offsetWidth || 288
+    const left = Math.max(8, Math.min(a.right - width, window.innerWidth - width - 8))
+
+    setPos({ bottom: Math.max(8, window.innerHeight - a.top + 8), left })
+  }, [])
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null)
+
+      return
+    }
+
+    place()
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(place)
+
+    if (panel.current) {
+      observer?.observe(panel.current)
+    }
+
+    const close = (event: Event) => {
+      const target = event.target as Node
+
+      if (!panel.current?.contains(target) && !anchor.current?.contains(target)) {
+        setOpen(false)
+      }
+    }
+
+    const esc = (event: KeyboardEvent) => event.key === 'Escape' && setOpen(false)
+
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    document.addEventListener('pointerdown', close)
+    document.addEventListener('keydown', esc)
+
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [open, place])
+
   const modelHint = /^claude/i.test((model || '').trim()) ? 'anthropic' : ''
 
   const donut =
@@ -61,35 +120,46 @@ export function UsageDonut({ model, provider: snapshotProvider }: { disabled?: b
   const arc = !donut || donut.fraction === null ? C : C * donut.fraction
 
   return (
-    <DropdownMenu>
+    <>
       <Tip label={label} side="top">
-        <DropdownMenuTrigger asChild>
-          <Button
-            aria-label={`${t.composer.usageLimits}: ${label}`}
-            className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
-            data-testid={donut ? 'usage-donut' : 'usage-donut-empty'}
-            type="button"
-            variant="ghost"
-          >
-            <svg aria-hidden className="size-4 -rotate-90" viewBox="0 0 16 16">
-              <circle className="stroke-current opacity-20" cx="8" cy="8" fill="none" r={R} strokeWidth="2.5" />
-              <circle
-                className={cn('transition-[stroke-dasharray]', donut ? TONE_STROKE[donut.tone] : 'stroke-current opacity-60')}
-                cx="8"
-                cy="8"
-                fill="none"
-                r={R}
-                strokeDasharray={donut ? `${arc} ${C}` : '2 2'}
-                strokeLinecap={donut ? 'round' : 'butt'}
-                strokeWidth="2.5"
-              />
-            </svg>
-          </Button>
-        </DropdownMenuTrigger>
+        <Button
+          aria-expanded={open}
+          aria-label={`${t.composer.usageLimits}: ${label}`}
+          className="size-(--composer-control-size) shrink-0 rounded-md p-0 text-(--ui-text-tertiary) hover:bg-(--chrome-action-hover)"
+          data-testid={donut ? 'usage-donut' : 'usage-donut-empty'}
+          onClick={() => setOpen(v => !v)}
+          ref={anchor}
+          type="button"
+          variant="ghost"
+        >
+          <svg aria-hidden className="size-4 -rotate-90" viewBox="0 0 16 16">
+            <circle className="stroke-current opacity-20" cx="8" cy="8" fill="none" r={R} strokeWidth="2.5" />
+            <circle
+              className={cn('transition-[stroke-dasharray]', donut ? TONE_STROKE[donut.tone] : 'stroke-current opacity-60')}
+              cx="8"
+              cy="8"
+              fill="none"
+              r={R}
+              strokeDasharray={donut ? `${arc} ${C}` : '2 2'}
+              strokeLinecap={donut ? 'round' : 'butt'}
+              strokeWidth="2.5"
+            />
+          </svg>
+        </Button>
       </Tip>
-      <DropdownMenuContent align="end" className="max-h-[70vh] w-72 overflow-y-auto p-2.5 text-xs" side="top" sideOffset={8}>
-        <UsageLimitsPanel />
-      </DropdownMenuContent>
-    </DropdownMenu>
+      {open &&
+        createPortal(
+          <div
+            className={cn(menuSurfaceClass, 'fixed z-[200] max-h-[70vh] w-72 overflow-y-auto p-2.5 text-xs')}
+            data-testid="usage-popover"
+            ref={panel}
+            role="dialog"
+            style={pos ?? { visibility: 'hidden' }}
+          >
+            <UsageLimitsPanel />
+          </div>,
+          document.body
+        )}
+    </>
   )
 }
