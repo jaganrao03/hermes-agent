@@ -508,6 +508,7 @@ def _v(reason: FailoverReason, **hints: Any) -> Verdict:
     return {"reason": reason, **hints}
 
 
+_USAGE_LIMIT_TERMINAL_RESET_S = 3600.0  # approved 2026-11-25: usage limits closed >1h are terminal
 _ROTATE_FALLBACK = {"should_rotate_credential": True, "should_fallback": True}
 _ABORT_FALLBACK = {"retryable": False, "should_fallback": True}
 _R = FailoverReason
@@ -1176,6 +1177,12 @@ def _status_429(c: _Ctx) -> Verdict:
         return _V_BILLING
     # Carry the reset window so the terminal copy can name it instead of "wait a minute" (#89401).
     reset = _rate_limit_reset_seconds(c.msg, c.body, c.headers)
+    # A usage-limit window that stays closed for more than an hour (e.g. a weekly Codex cap)
+    # cannot be waited out: make it terminal so the run fails once instead of retrying all week.
+    # Fallback is still attempted. Short windows keep the retryable rate_limit path.
+    if quota_wall and not explicit_rate_limit and reset and reset > _USAGE_LIMIT_TERMINAL_RESET_S:
+        return _v(_R.rate_limit, retryable=False, **_ROTATE_FALLBACK,
+                  error_context={"reset_at": time.time() + reset})
     if reset:
         return _v(_R.rate_limit, **_ROTATE_FALLBACK, error_context={"reset_at": time.time() + reset})
     return _V_RATE_LIMIT
