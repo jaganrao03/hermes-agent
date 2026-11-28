@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { $narrowOverlayPaneIds } from '@/components/pane-shell/narrow-overlay-state'
 import { registry } from '@/contrib/registry'
+import { publishDrawerDrag, releaseDrawerDrag } from '@/lib/drawer-drag'
 import { $paneStates, setPaneWidthOverride } from '@/store/panes'
 import { $connection } from '@/store/session'
 import { stubResizeObserver } from '@/test/jsdom'
@@ -83,6 +84,41 @@ const asBrowserHost = () => {
 const asNativeDesktop = () => {
   ;(window as unknown as { hermesDesktop?: unknown }).hermesDesktop = {}
 }
+
+describe('narrow overlay drag progress', () => {
+  afterEach(() => releaseDrawerDrag())
+
+  // The swipe hook dispatches "open" and publishes progress in one handler; the overlay mounts a render
+  // later. Progress now lives on the element (not :root), so it must be applied as the element attaches.
+  it('starts under the thumb when it mounts mid-gesture, then follows and releases with the drag', () => {
+    asBrowserHost()
+    render(<NarrowOverlays />)
+    publishDrawerDrag(0.3)
+    revealPane('sessions')
+
+    const overlay = globalThis.document.querySelector<HTMLElement>('[data-narrow-overlay="sessions"]')
+
+    expect(overlay?.style.getPropertyValue('--drawer-drag')).toBe('0.300')
+
+    publishDrawerDrag(0.8)
+    expect(overlay?.style.getPropertyValue('--drawer-drag')).toBe('0.800')
+
+    releaseDrawerDrag()
+    expect(overlay?.style.getPropertyValue('--drawer-drag')).toBe('')
+    expect(globalThis.document.documentElement.style.getPropertyValue('--drawer-drag')).toBe('')
+  })
+
+  it('stops following the drag once the overlay unmounts', () => {
+    asBrowserHost()
+    const view = render(<NarrowOverlays />)
+
+    revealPane('sessions')
+    expect(globalThis.document.querySelector('[data-narrow-overlay="sessions"]')).not.toBeNull()
+    view.unmount()
+
+    expect(() => publishDrawerDrag(0.5)).not.toThrow()
+  })
+})
 
 describe('narrow overlay in native Desktop', () => {
   // A narrow native window keeps main's overlay: no full-window backdrop, so a

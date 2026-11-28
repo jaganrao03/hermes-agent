@@ -970,6 +970,16 @@ html[data-hermes-desktop-host='browser']
    The transition is what settles the panel after the thumb lifts; while a drag
    is live the document carries `data-drawer-drag` and the transition is off, or
    the panel would lag a frame behind the finger. */
+/* Registered so the drag value does NOT inherit. The drawer's rows would otherwise
+   restyle on every touchmove; measured at 4x CPU with 1,600 sessions: 35 ms ->
+   ~2 ms per frame. The hook writes it to the drawer element, never to :root. A
+   browser without @property still works — the var is set on the drawer itself. */
+@property --drawer-drag {
+  syntax: '<number>';
+  inherits: false;
+  initial-value: 1;
+}
+
 [data-narrow-overlay] {
   will-change: transform;
 }

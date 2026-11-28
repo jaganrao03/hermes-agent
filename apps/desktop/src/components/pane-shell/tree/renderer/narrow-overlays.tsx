@@ -15,6 +15,7 @@ import { usePaneTabKeyboard } from '@/components/ui/pane-tab-keyboard'
 import { ContribBoundary, ContribRender } from '@/contrib/react/boundary'
 import { useContributions } from '@/contrib/react/use-contributions'
 import type { Contribution } from '@/contrib/types'
+import { bindDrawerDragTarget } from '@/lib/drawer-drag'
 import { ESCAPE_PRIORITY, isTopEscapeLayer, pushEscapeLayer } from '@/lib/escape-layers'
 import { hostHas } from '@/lib/host-capabilities'
 import { cn } from '@/lib/utils'
@@ -65,9 +66,20 @@ export function NarrowOverlays() {
   // (macOS traffic lights) when the sidebar is on the left. Reserve their rect
   // the same way a docked zone does (TreeGroup's wcOverlap -> paddingTop plus
   // an absolute drag-region spacer so the band stays a window-drag target).
-  const overlayRef = useRef<HTMLDivElement>(null)
+  const overlayRef = useRef<HTMLDivElement | null>(null)
   const outsidePress = useRef<{ id: number; x: number; y: number } | null>(null)
   const wcOverlap = useWindowControlsOverlap(overlayRef, reveal !== null)
+
+  // The phone drawer's drag progress is written to this element (lib/drawer-drag), not to :root.
+  // A ref callback binds it the moment it attaches — before first paint — so a drawer mounted
+  // mid-gesture starts under the thumb; the other hooks keep reading `overlayRef`.
+  const unbindDrag = useRef<() => void>(() => {})
+
+  const attachOverlay = useCallback((el: HTMLDivElement | null) => {
+    overlayRef.current = el
+    unbindDrag.current()
+    unbindDrag.current = bindDrawerDragTarget(el)
+  }, [])
 
   const onMouseLeave = useCallback<MouseEventHandler<HTMLDivElement>>(event => {
     // The overlay's chrome and its stable guest are DOM siblings, but one
@@ -280,7 +292,7 @@ export function NarrowOverlays() {
           // as `--drawer-drag`, and styles.css picks the matching direction.
           data-narrow-overlay-side={sideOf(revealed) === 'left' ? 'left' : 'right'}
           onMouseLeave={onMouseLeave}
-          ref={overlayRef}
+          ref={attachOverlay}
           // Match the pane's docked width (sessions ~237px, files its rail
           // width) instead of a fat fixed 20rem — capped for tiny screens.
           // paddingTop keeps the tab strip below the native window controls

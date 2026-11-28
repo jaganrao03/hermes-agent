@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { $narrowOverlayPaneIds } from '@/components/pane-shell/narrow-overlay-state'
 import { $narrowViewport } from '@/components/pane-shell/tree/store'
+import { bindDrawerDragTarget, publishDrawerDrag, releaseDrawerDrag } from '@/lib/drawer-drag'
 
 import { useDrawerSwipe } from './use-drawer-swipe'
 
@@ -65,8 +66,12 @@ function touches(type: 'touchstart' | 'touchmove' | 'touchend', down: Array<[num
   document.body.dispatchEvent(event)
 }
 
+// The drawer element the hook publishes to (lib/drawer-drag) — never :root, whose inherited var restyled the page.
+let drawerEl: HTMLElement
+let unbindDrawer: () => void
+
 function progress(): string | null {
-  return document.documentElement.style.getPropertyValue('--drawer-drag') || null
+  return drawerEl.style.getPropertyValue('--drawer-drag') || null
 }
 
 function capture(): { seen: ReturnType<typeof vi.fn>; stop: () => void } {
@@ -83,17 +88,18 @@ describe('useDrawerSwipe', () => {
     withCoarsePointer(true)
     $narrowViewport.set(true)
     $narrowOverlayPaneIds.set(new Set())
-    document.documentElement.removeAttribute('data-drawer-drag')
-    document.documentElement.style.removeProperty('--drawer-drag')
+    releaseDrawerDrag()
+    drawerEl = document.createElement('div')
+    unbindDrawer = bindDrawerDragTarget(drawerEl)
   })
 
   afterEach(() => {
+    unbindDrawer()
     vi.useRealTimers()
     window.matchMedia = realMatchMedia
     $narrowViewport.set(false)
     $narrowOverlayPaneIds.set(new Set())
-    document.documentElement.removeAttribute('data-drawer-drag')
-    document.documentElement.style.removeProperty('--drawer-drag')
+    releaseDrawerDrag()
     vi.restoreAllMocks()
     document.body.innerHTML = ''
   })
@@ -308,8 +314,8 @@ describe('useDrawerSwipe', () => {
     it('does not leave a stale drag value behind when the drawer is revealed another way', () => {
       renderHook(() => useDrawerSwipe())
       // A value stranded by an interrupted gesture...
-      document.documentElement.setAttribute('data-drawer-drag', '')
-      document.documentElement.style.setProperty('--drawer-drag', '0.000')
+      publishDrawerDrag(0)
+      expect(progress()).toBe('0.000')
 
       // ...must not survive the drawer being opened from the titlebar (no gesture active).
       $narrowOverlayPaneIds.set(new Set(['sessions']))

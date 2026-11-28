@@ -3,6 +3,7 @@ import { useEffect } from 'react'
 import { PANE_TOGGLE_REVEAL_EVENT } from '@/components/pane-shell'
 import { $narrowOverlayPaneIds } from '@/components/pane-shell/narrow-overlay-state'
 import { $narrowViewport } from '@/components/pane-shell/tree/store'
+import { publishDrawerDrag, releaseDrawerDrag } from '@/lib/drawer-drag'
 
 /** Travel that proves the thumb is dragging, not just landing. */
 const INTENT_PX = 12
@@ -15,9 +16,6 @@ const AXIS_RATIO = 1.4
 const TRAVEL_PX = 260
 /** Must outlast the settle transition in styles.css. */
 const SETTLE_MS = 200
-
-const DRAG_VAR = '--drawer-drag'
-const DRAG_ATTR = 'data-drawer-drag'
 
 /** The pane a rightward pull reveals: the session sidebar's real id. */
 const SIDEBAR_PANE_ID = 'sessions'
@@ -63,16 +61,10 @@ function dispatchReveal(mode: 'close' | 'open'): void {
 }
 
 /** Publish the drag's progress so the panel can sit under the thumb. */
-function setProgress(progress: number): void {
-  document.documentElement.setAttribute(DRAG_ATTR, '')
-  document.documentElement.style.setProperty(DRAG_VAR, progress.toFixed(3))
-}
+const setProgress = publishDrawerDrag
 
 /** Drop the progress so the panel settles at rest, animated by its transition. */
-function releaseProgress(): void {
-  document.documentElement.removeAttribute(DRAG_ATTR)
-  document.documentElement.style.removeProperty(DRAG_VAR)
-}
+const releaseProgress = releaseDrawerDrag
 
 const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
 
@@ -84,7 +76,7 @@ const clamp01 = (value: number) => Math.min(1, Math.max(0, value))
  * the right to bring the drawer out, flick it back to the left to dismiss it.
  *
  * The panel follows the thumb instead of snapping open on release: progress is
- * published as `--drawer-drag` on the document — never as React state, so a
+ * published as `--drawer-drag` on the drawer element (lib/drawer-drag) — never as React state, so a
  * drag costs no renders — and styles.css turns it into a transform. When the
  * thumb lifts the same progress decides where it settles, and the browser
  * animates the rest on the compositor.
