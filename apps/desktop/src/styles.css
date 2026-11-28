@@ -853,6 +853,19 @@
    minimum recommended for coarse pointers without adding a second
    mobile-only component. The touch layout is the browser-hosted Desktop's;
    native Desktop keeps its compact rhythm on a coarse pointer too. */
+@media (pointer: coarse) {
+  /* A sideways drag that starts on a vertical scroller is Chrome's history swipe: the page
+     went back to about:blank under the thumb, so the drawer swipe (use-drawer-swipe) never
+     got its gesture. `overscroll-behavior` does not stop it; only the scroller's own
+     `touch-action` does (it is read from the nearest scroll container, so html/body/#root
+     are no use). Sideways scrollers (code, tabs, carousels) are excluded, as they need
+     horizontal panning. */
+  html[data-hermes-desktop-host='browser']
+    .overflow-y-auto:not(.overflow-x-auto, .overflow-x-scroll, .overflow-auto, .overflow-scroll, [data-slot='composer-root']) {
+    touch-action: pan-y pinch-zoom;
+  }
+}
+
 @media (hover: none), (pointer: coarse) {
   html[data-hermes-desktop-host='browser'] {
     --composer-control-size: 2.75rem;

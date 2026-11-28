@@ -113,20 +113,36 @@ export function useDrawerSwipe(): void {
     let startY = 0
     let tracking = false
     let dragging = false
+    let lastDx = 0
     let mode: 'close' | 'open' = 'open'
     let settleTimer: ReturnType<typeof setTimeout> | undefined
 
-    const clearSettle = () => {
-      if (settleTimer !== undefined) {
-        clearTimeout(settleTimer)
-        settleTimer = undefined
+    /** A close that is still sliding out: finish it NOW. Dropping the timer would strand
+     *  `--drawer-drag: 0` and leave the drawer mounted off-screen, so the next reveal
+     *  opened an invisible panel. Returns whether a close was pending. */
+    const flushSettle = (): boolean => {
+      if (settleTimer === undefined) {
+        return false
       }
+
+      clearTimeout(settleTimer)
+      settleTimer = undefined
+      dispatchReveal('close')
+      releaseProgress()
+
+      return true
     }
 
     const onTouchStart = (event: TouchEvent) => {
-      clearSettle()
+      const closing = flushSettle()
 
       if (!$narrowViewport.get() || event.touches.length !== 1) {
+        // A second finger (or a palm) while one was dragging: the gesture is over, so settle the
+        // drawer by how far it was carried. Only dropping `tracking` froze it at the drag progress.
+        if (dragging) {
+          finish(lastDx)
+        }
+
         tracking = false
 
         return
@@ -138,8 +154,10 @@ export function useDrawerSwipe(): void {
       startY = touch.clientY
       dragging = false
 
-      const open = $narrowOverlayPaneIds.get().size > 0
+      // `closing`: the overlay store only learns of the close a render later.
+      const open = !closing && $narrowOverlayPaneIds.get().size > 0
 
+      lastDx = 0
       mode = open ? 'close' : 'open'
       // A drawer already on screen is dismissed from anywhere on it; the
       // conversation opens it only from its own canvas.
@@ -159,6 +177,8 @@ export function useDrawerSwipe(): void {
 
       const dx = touch.clientX - startX
       const dy = touch.clientY - startY
+
+      lastDx = dx
 
       if (!dragging) {
         if (Math.abs(dx) < INTENT_PX || Math.abs(dx) < Math.abs(dy) * AXIS_RATIO) {
@@ -180,33 +200,16 @@ export function useDrawerSwipe(): void {
     const settleClosed = () => {
       setProgress(0)
       settleTimer = setTimeout(() => {
+        settleTimer = undefined
         dispatchReveal('close')
         releaseProgress()
       }, SETTLE_MS)
     }
 
-    const onTouchEnd = (event: TouchEvent) => {
-      if (!tracking) {
-        return
-      }
-
+    /** Where a drag that ended `dx` from where it began settles: open, closed, or snapped back. */
+    const finish = (dx: number) => {
       tracking = false
-
-      if (!dragging) {
-        return
-      }
-
       dragging = false
-
-      const touch = event.changedTouches[0]
-
-      if (!touch) {
-        releaseProgress()
-
-        return
-      }
-
-      const dx = touch.clientX - startX
 
       if (mode === 'open') {
         if (dx >= OPEN_PX) {
@@ -230,11 +233,51 @@ export function useDrawerSwipe(): void {
       releaseProgress()
     }
 
+    const onTouchEnd = (event: TouchEvent) => {
+      if (!tracking) {
+        return
+      }
+
+      if (!dragging) {
+        tracking = false
+
+        return
+      }
+
+      const touch = event.changedTouches[0]
+
+      if (!touch) {
+        tracking = false
+        dragging = false
+        releaseProgress()
+
+        return
+      }
+
+      finish(touch.clientX - startX)
+    }
+
+    // The browser took the touch (a vertical scroll, a system gesture). Settle by how far the thumb
+    // got instead of snapping an unfinished open to fully open.
     const cancel = () => {
+      if (dragging) {
+        finish(lastDx)
+
+        return
+      }
+
       tracking = false
-      dragging = false
       releaseProgress()
     }
+
+    // The drag variable only means anything while a thumb is down or a close is sliding out. Any other
+    // time it is stale (an interrupted gesture, a drawer opened from the titlebar) and a stale 0
+    // would mount the panel off-screen, so clear it whenever the overlay changes with no gesture live.
+    const stopWatching = $narrowOverlayPaneIds.listen(() => {
+      if (!dragging && settleTimer === undefined) {
+        releaseProgress()
+      }
+    })
 
     window.addEventListener('touchstart', onTouchStart, { passive: true })
     window.addEventListener('touchmove', onTouchMove, { passive: true })
@@ -242,7 +285,13 @@ export function useDrawerSwipe(): void {
     window.addEventListener('touchcancel', cancel, { passive: true })
 
     return () => {
-      clearSettle()
+      stopWatching()
+
+      if (settleTimer !== undefined) {
+        clearTimeout(settleTimer)
+        settleTimer = undefined
+      }
+
       releaseProgress()
       window.removeEventListener('touchstart', onTouchStart)
       window.removeEventListener('touchmove', onTouchMove)

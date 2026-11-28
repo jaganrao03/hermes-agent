@@ -52,6 +52,19 @@ function drag(path: Array<[number, number]>, target: EventTarget = document.body
   touch('touchend', ...path[path.length - 1])
 }
 
+
+/** Several fingers at once: `touches` is every point still down; `changed` is what just moved/lifted. */
+function touches(type: 'touchstart' | 'touchmove' | 'touchend', down: Array<[number, number]>, changed = down): void {
+  const event = new Event(type, { bubbles: true })
+  const list = (points: Array<[number, number]>) => points.map(([clientX, clientY]) => ({ clientX, clientY }))
+
+  Object.defineProperties(event, {
+    touches: { value: type === 'touchend' ? list(down) : list(down) },
+    changedTouches: { value: list(changed) }
+  })
+  document.body.dispatchEvent(event)
+}
+
 function progress(): string | null {
   return document.documentElement.style.getPropertyValue('--drawer-drag') || null
 }
@@ -246,5 +259,63 @@ describe('useDrawerSwipe', () => {
 
     expect(seen).not.toHaveBeenCalled()
     stop()
+  })
+
+  describe('drawer is never left partway (phone regressions)', () => {
+    it('settles when a second finger lands mid-drag instead of freezing at the drag progress', () => {
+      vi.useFakeTimers()
+      const { seen, stop } = capture()
+      renderHook(() => useDrawerSwipe())
+
+      touch('touchstart', 180, 420)
+      touch('touchmove', 260, 424)
+      expect(progress()).not.toBeNull() // thumb is carrying the drawer
+
+      touches('touchstart', [[260, 424], [100, 600]], [[100, 600]]) // palm / second finger
+      touches('touchend', [[100, 600]], [[260, 424]])
+      touches('touchend', [], [[100, 600]])
+      vi.advanceTimersByTime(500)
+
+      // No lingering drag state: the drawer is either fully open or closed, never at 0.3.
+      expect(progress()).toBeNull()
+      expect(document.documentElement.hasAttribute('data-drawer-drag')).toBe(false)
+      stop()
+    })
+
+    it('finishes closing when the next touch lands inside the 200ms settle window', () => {
+      vi.useFakeTimers()
+      const { seen, stop } = capture()
+      $narrowOverlayPaneIds.set(new Set(['sessions']))
+      renderHook(() => useDrawerSwipe())
+
+      touch('touchstart', 300, 500)
+      touch('touchmove', 240, 502)
+      touch('touchend', 200, 503) // flick closed -> progress 0, close queued
+      expect(progress()).toBe('0.000')
+
+      vi.advanceTimersByTime(80)
+      touch('touchstart', 200, 300) // an impatient tap before the close lands
+      touch('touchend', 200, 300)
+      vi.advanceTimersByTime(500)
+
+      // The close must still be delivered and the 0 progress cleared, or the next
+      // reveal mounts the drawer fully translated off-screen.
+      expect(seen.mock.calls.map(c => (c[0] as CustomEvent).detail.mode)).toContain('close')
+      expect(progress()).toBeNull()
+      stop()
+    })
+
+    it('does not leave a stale drag value behind when the drawer is revealed another way', () => {
+      renderHook(() => useDrawerSwipe())
+      // A value stranded by an interrupted gesture...
+      document.documentElement.setAttribute('data-drawer-drag', '')
+      document.documentElement.style.setProperty('--drawer-drag', '0.000')
+
+      // ...must not survive the drawer being opened from the titlebar (no gesture active).
+      $narrowOverlayPaneIds.set(new Set(['sessions']))
+
+      expect(progress()).toBeNull()
+      expect(document.documentElement.hasAttribute('data-drawer-drag')).toBe(false)
+    })
   })
 })
